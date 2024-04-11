@@ -1,0 +1,10 @@
+streamlit
+ccxt
+pandas
+pandas-stubs
+plotly
+colorlog
+statsmodels
+pmdarima
+scipy
+ruff

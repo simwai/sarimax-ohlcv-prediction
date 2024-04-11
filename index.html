@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>My Trading Chart</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.3/css/bulma.min.css">
+</head>
+
+<body>
+  <section class="section">
+    <div class="container">
+      <h1 class="title">My Trading Chart</h1>
+      <div id="chart"></div>
+      <button class="button is-primary is-light" id="helpButton">Help</button>
+    </div>
+  </section>
+
+  <div class="modal" id="helpModal">
+    <div class="modal-background"></div>
+    <div class="modal-content">
+      <div class="box">
+        <h2 class="title is-4">About this chart</h2>
+        <p>This chart displays trading data fetched from a CSV file hosted on GitHub. It uses Plotly.js to create an
+          interactive candlestick chart. Here's a breakdown of what's happening:</p>
+        <ul>
+          <li><strong>Data Fetching:</strong> When the page loads, the JavaScript code fetches data from a CSV file
+            hosted on GitHub. This data includes timestamps, open prices, high prices, low prices, close prices, and
+            volumes for each trading period.</li>
+          <li><strong>Chart Creation:</strong> The fetched data is used to create a candlestick chart using Plotly.js. A
+            candlestick chart is a style of financial chart used to describe price movements of a security, derivative,
+            or currency. Each "candlestick" typically shows one day, thus a one-month chart may show the 20 trading days
+            as 20 candlesticks.</li>
+          <li><strong>Interactivity:</strong> The chart is interactive. You can zoom in and out, hover over data points
+            to see more information, and pan across the chart.</li>
+          <li><strong>Responsiveness:</strong> The website is built using Bulma CSS, a modern CSS framework based on
+            Flexbox. This makes the website responsive, meaning it adjusts its layout and functionality based on the
+            size of the user's screen.</li>
+          <li><strong>Help Modal:</strong> This is the help modal! It provides more information about the chart and the
+            website. You can open it by clicking the "Help" button, and close it by clicking the "X" button in the top
+            right corner.</li>
+        </ul>
+      </div>
+    </div>
+    <button class="modal-close is-large" aria-label="close" id="closeButton"></button>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const helpButton = document.getElementById('helpButton');
+      const closeButton = document.getElementById('closeButton');
+      const helpModal = document.getElementById('helpModal');
+
+      helpButton.addEventListener('click', () => {
+        helpModal.classList.add('is-active');
+      });
+
+      closeButton.addEventListener('click', () => {
+        helpModal.classList.remove('is-active');
+      });
+
+      fetch('https://raw.githubusercontent.com/yourusername/yourrepo/master/predicted_prices.csv')
+        .then(response => response.text())
+        .then(data => {
+          const rows = data.split('\n').slice(1);
+          const timestamps = rows.map(row => new Date(Number(row.split(',')[0])));
+          const opens = rows.map(row => Number(row.split(',')[1]));
+          const highs = rows.map(row => Number(row.split(',')[2]));
+          const lows = rows.map(row => Number(row.split(',')[3]));
+          const closes = rows.map(row => Number(row.split(',')[4]));
+          const volumes = rows.map(row => Number(row.split(',')[5]));
+
+          const trace = {
+            x: timestamps,
+            close: closes,
+            decreasing: { line: { color: '#7F7F7F' } },
+            high: highs,
+            increasing: { line: { color: '#17BECF' } },
+            line: { color: 'rgba(31,119,180,1)' },
+            low: lows,
+            open: opens,
+            type: 'candlestick',
+            xaxis: 'x',
+            yaxis: 'y'
+          };
+
+          const layout = {
+            dragmode: 'zoom',
+            margin: {
+              r: 10,
+              t: 25,
+              b: 40,
+              l: 60
+            },
+            showlegend: false,
+            xaxis: {
+              autorange: true,
+              domain: [0, 1],
+              range: [timestamps[0], timestamps[timestamps.length - 1]],
+              rangeslider: { range: [timestamps[0], timestamps[timestamps.length - 1]] },
+              title: 'Date',
+              type: 'date'
+            },
+            yaxis: {
+              autorange: true,
+              domain: [0, 1],
+              range: [Math.min(...lows), Math.max(...highs)],
+              type: 'linear'
+            }
+          };
+
+          Plotly.newPlot('chart', [trace], layout);
+        });
+    });
+  </script>
+</body>
+
+</html>
