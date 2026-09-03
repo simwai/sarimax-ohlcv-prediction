@@ -135,6 +135,8 @@ class LSTMModel(ModelBase):
         if not TF_AVAILABLE:
             raise RuntimeError(_TF_NOT_INSTALLED_TRAIN)
 
+        self._store_training_data(data)
+
         epochs = kwargs.get("epochs", self.epochs)
         batch_size = kwargs.get("batch_size", self.batch_size)
         validation_split = kwargs.get("validation_split", self.validation_split)

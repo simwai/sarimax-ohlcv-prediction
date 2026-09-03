@@ -40,6 +40,14 @@ class Settings:
     data_dir: Path = Path("data")
     models_dir: Path = Path("models")
     logs_dir: Path = Path("logs")
+    cache_dir: Path = Path("cache")
+
+    # Cache settings
+    cache_enabled: bool = True
+    cache_ttl_ohlcv_current: int = 3600      # 1 hour
+    cache_ttl_ohlcv_historical: int = 86400  # 24 hours
+    cache_ttl_predictions: int = 1800        # 30 min
+    cache_ttl_models: int = 604800           # 7 days
 
 
 SETTINGS = Settings()

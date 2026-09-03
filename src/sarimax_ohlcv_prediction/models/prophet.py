@@ -41,6 +41,7 @@ class ProphetModel(ModelBase):
 
     def fit(self, data: pd.DataFrame, **kwargs) -> "ProphetModel":
         """Fit Prophet model for each column."""
+        self._store_training_data(data)
         self.models = {}
         self.forecasts = {}
 

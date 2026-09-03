@@ -1,9 +1,22 @@
 """Models package - exports all model implementations."""
 
+import logging
+
+import pandas as pd
+
+from ..cache import (
+    cache_get,
+    cache_set,
+    compute_data_hash,
+    get_model_key_from_params,
+)
+from ..config import SETTINGS
 from .base import BaseModel, ModelBase
 from .lstm import LSTMModel
 from .prophet import ProphetModel
 from .sarimax import SARIMAXModel
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "BaseModel",
@@ -30,6 +43,96 @@ def get_model_class(name: str) -> type:
     return MODEL_REGISTRY[name]
 
 
-def create_model(name: str, **kwargs) -> BaseModel:
-    """Create model instance by name."""
+def create_model(
+    name: str,
+    lookback: int | None = None,
+    iterations: int | None = None,
+    use_cache: bool = True,
+    **kwargs,
+) -> BaseModel:
+    """Create model instance by name.
+
+    Args:
+        name: Model name (SARIMAX, Prophet, LSTM)
+        lookback: Training data lookback days (for cache key)
+        iterations: Training iterations/epochs (for cache key)
+        use_cache: Whether to use model cache
+        **kwargs: Additional model arguments
+
+    Returns:
+        Model instance
+    """
     return get_model_class(name)(**kwargs)
+
+
+def _get_or_train_model(
+    name: str,
+    data: "pd.DataFrame",
+    lookback: int,
+    iterations: int,
+    use_cache: bool = True,
+    **kwargs,
+) -> BaseModel:
+    """Get cached model or train new one.
+
+    Args:
+        name: Model name
+        data: Training data
+        lookback: Lookback days
+        iterations: Training iterations
+        use_cache: Whether to use cache
+        **kwargs: Additional model arguments
+
+    Returns:
+        Trained model instance
+    """
+    if not use_cache:
+        model = create_model(name, **kwargs)
+        model.fit(data, iterations=iterations)
+        return model
+
+    # Compute data hash for cache key
+    data_hash = compute_data_hash(data)
+    cache_key = get_model_key_from_params(name, lookback, iterations, data_hash)
+
+    # Try to load from cache
+    cached_model = cache_get(cache_key)
+    if cached_model is not None:
+        logger.debug("Cache HIT for model: %s", cache_key)
+        return cached_model
+
+    # Cache miss - train new model
+    logger.debug("Cache MISS for model: %s", cache_key)
+    model = create_model(name, **kwargs)
+    model.fit(data, iterations=iterations)
+
+    # Save to cache
+    cache_set(cache_key, model, SETTINGS.cache_ttl_models)
+    return model
+
+
+def get_cached_model(
+    name: str,
+    data: "pd.DataFrame",
+    lookback: int | None = None,
+    iterations: int | None = None,
+    use_cache: bool = True,
+    **kwargs,
+) -> BaseModel:
+    """Get model from cache or train new one.
+
+    Args:
+        name: Model name
+        data: Training data
+        lookback: Lookback days (default from SETTINGS)
+        iterations: Training iterations (default from SETTINGS)
+        use_cache: Whether to use cache
+        **kwargs: Additional model arguments
+
+    Returns:
+        Trained model instance
+    """
+    lookback = lookback or SETTINGS.default_lookback_days
+    iterations = iterations or SETTINGS.default_iterations
+
+    return _get_or_train_model(name, data, lookback, iterations, use_cache, **kwargs)

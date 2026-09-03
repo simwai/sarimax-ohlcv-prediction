@@ -153,6 +153,7 @@ class SARIMAXModel(ModelBase):
 
     def fit(self, data: pd.DataFrame, **kwargs) -> "SARIMAXModel":
         """Optimize and fit SARIMAX for each column."""
+        self._store_training_data(data)
         self.models = {}
         self.best_m_values = {}
 

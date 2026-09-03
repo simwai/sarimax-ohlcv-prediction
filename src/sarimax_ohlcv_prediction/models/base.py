@@ -5,6 +5,8 @@ from typing import Protocol, runtime_checkable
 
 import pandas as pd
 
+from ..cache import compute_data_hash
+
 
 @runtime_checkable
 class BaseModel(Protocol):
@@ -35,6 +37,11 @@ class BaseModel(Protocol):
         """Load model from disk."""
         ...
 
+    @property
+    def data_hash(self) -> str:
+        """Hash of training data for cache invalidation."""
+        ...
+
 
 class ModelBase(ABC):
     """Abstract base class with common functionality."""
@@ -42,6 +49,8 @@ class ModelBase(ABC):
     def __init__(self) -> None:
         self.is_fitted = False
         self.columns = ["open", "high", "low", "close", "volume"]
+        self._data_hash: str | None = None
+        self._training_data: pd.DataFrame | None = None
 
     @abstractmethod
     def fit(self, data: pd.DataFrame, **kwargs) -> "ModelBase":
@@ -64,3 +73,15 @@ class ModelBase(ABC):
     @abstractmethod
     def load(cls, path: str) -> "ModelBase":
         pass
+
+    def _store_training_data(self, data: pd.DataFrame) -> None:
+        """Store training data and compute hash for caching."""
+        self._training_data = data.copy()
+        self._data_hash = compute_data_hash(data)
+
+    @property
+    def data_hash(self) -> str:
+        """Hash of training data for cache invalidation."""
+        if self._data_hash is None:
+            return "unknown"
+        return self._data_hash

@@ -7,6 +7,7 @@ from typing import Literal
 import ccxt
 import pandas as pd
 
+from ..cache import cache_get, cache_set, get_ohlcv_key_from_params
 from ..config import SETTINGS
 
 logger = logging.getLogger(__name__)
@@ -56,12 +57,12 @@ def fetch_data(
         return pd.DataFrame()
 
 
-def fetch_with_retry(
+def _fetch_with_retry_uncached(
     mode: Literal["current", "historical"],
     lookback_days: int | None = None,
     max_retries: int = 3,
 ) -> pd.DataFrame:
-    """Fetch data with retry logic."""
+    """Fetch data with retry logic (uncached version)."""
     for attempt in range(max_retries):
         data = fetch_data(mode, lookback_days)
         if not data.empty:
@@ -70,3 +71,47 @@ def fetch_with_retry(
             logger.warning("Retry %d/%d after empty data", attempt + 1, max_retries)
             time.sleep(SETTINGS.error_sleep_seconds)
     return pd.DataFrame()
+
+
+def fetch_with_retry(
+    mode: Literal["current", "historical"],
+    lookback_days: int | None = None,
+    max_retries: int = 3,
+    use_cache: bool = True,
+) -> pd.DataFrame:
+    """Fetch data with retry logic and optional caching.
+
+    Args:
+        mode: "current" for last 24h, "historical" for lookback_days
+        lookback_days: Number of days to look back (for historical mode)
+        max_retries: Maximum retry attempts
+        use_cache: Whether to use cache (default True)
+
+    Returns:
+        DataFrame with OHLCV data
+    """
+    lookback = lookback_days or SETTINGS.default_lookback_days
+
+    if not use_cache:
+        return _fetch_with_retry_uncached(mode, lookback_days, max_retries)
+
+    # Check cache first
+    cache_key = get_ohlcv_key_from_params(mode, lookback)
+    cached_data = cache_get(cache_key)
+    if cached_data is not None:
+        logger.debug("Cache HIT for OHLCV: %s", cache_key)
+        return cached_data
+
+    # Cache miss - fetch data
+    logger.debug("Cache MISS for OHLCV: %s", cache_key)
+    data = _fetch_with_retry_uncached(mode, lookback_days, max_retries)
+
+    # Store in cache if we got data
+    if not data.empty:
+        if mode == "current":
+            ttl = SETTINGS.cache_ttl_ohlcv_current
+        else:
+            ttl = SETTINGS.cache_ttl_ohlcv_historical
+        cache_set(cache_key, data, ttl)
+
+    return data
