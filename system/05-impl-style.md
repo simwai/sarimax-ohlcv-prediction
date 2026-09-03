@@ -301,6 +301,7 @@ The defaults above are a floor, not a ceiling. They never replace the per-edit l
 
     T = TypeVar("T")
 
+
     def safe(fn: Callable[[], T]) -> Result[T, Exception]:
         try:
             return Ok(fn())

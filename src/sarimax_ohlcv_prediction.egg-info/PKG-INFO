@@ -1,0 +1,26 @@
+Metadata-Version: 2.4
+Name: sarimax-ohlcv-prediction
+Version: 0.1.0
+Summary: Bitcoin price prediction with SARIMAX, Prophet, and LSTM models
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: streamlit>=1.35
+Requires-Dist: plotly<7,>=5.20
+Requires-Dist: prophet>=1.1
+Requires-Dist: pmdarima>=2.0
+Requires-Dist: pandas>=2.1
+Requires-Dist: ccxt>=4.2
+Requires-Dist: colorlog>=6.8
+Requires-Dist: rich>=13.7
+Requires-Dist: typer>=0.9
+Requires-Dist: vectorbt>=0.29
+Requires-Dist: scikit-learn>=1.4
+Requires-Dist: tensorflow>=2.16
+Requires-Dist: numpy>=1.26
+Requires-Dist: joblib>=1.4
+Provides-Extra: dev
+Requires-Dist: ruff>=0.5; extra == "dev"
+Requires-Dist: pyrefly>=0.1; extra == "dev"
+Requires-Dist: pytest>=8.2; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.23; extra == "dev"
+Requires-Dist: prompt-toolkit>=3.0; extra == "dev"
