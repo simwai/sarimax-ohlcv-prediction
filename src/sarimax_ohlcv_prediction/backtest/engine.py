@@ -126,7 +126,7 @@ def run_backtest(  # noqa: PLR0912
         close=close_prices,
         entries=entries,
         exits=exits,
-        freq="5T",
+        freq="5min",
         init_cash=10000,
         fees=0.001,  # 0.1% fee
         slippage=0.0005,  # 0.05% slippage

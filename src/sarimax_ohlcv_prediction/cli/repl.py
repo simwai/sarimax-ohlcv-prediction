@@ -7,7 +7,6 @@ from typing import Literal, cast
 
 import numpy as np
 import pandas as pd
-from rich import box
 from rich.console import Group
 from rich.live import Live
 from rich.panel import Panel
@@ -30,16 +29,31 @@ from ..backtest.strategies import STRATEGY_REGISTRY
 from ..config import SETTINGS
 from ..data.fetcher import fetch_with_retry
 from ..models import MODEL_REGISTRY, create_model
-from ..viz.rich import console, print_data_summary, print_predictions_table
+from ..viz.rich import console
+from ..viz.components import (
+    DataTable,
+    HelpTable,
+    LiveLayout,
+    MetricCard,
+    ProgressBar,
+    print_backtest_results,
+    print_data_summary,
+    print_inline_status,
+    print_model_comparison,
+    print_predictions_table,
+    print_verbose_status,
+    status_spinner,
+)
 
 Mode = Literal["current", "historical"]
 
 
 def _as_mode(mode: str) -> Mode:
     if mode not in ("current", "historical"):
-        console.print(f"[yellow]Invalid mode: {mode}, using current[/yellow]")
+        console.print(f"[warning]Invalid mode: {mode}, using current[/warning]")
         return cast(Mode, "current")
     return cast(Mode, mode)
+
 
 # Global state for REPL
 _state = {
@@ -55,55 +69,35 @@ _MIN_ARGS_BACKTEST_LOOKBACK = 3
 _MIN_HOLDOUT = 2
 
 
-def _build_help_table() -> Table:
+def _build_help_table() -> HelpTable:
     """Build aligned help table: cmd | args | description (fixed columns)."""
-    table = Table(
-        show_header=False,
-        box=None,
-        padding=(0, 1),
-        collapse_padding=True,
-        show_edge=False,
-    )
-    table.add_column("cmd", style="cyan", no_wrap=True, width=14)
-    table.add_column("args", style="dim", no_wrap=False, min_width=32, max_width=45)
-    table.add_column("desc", style="white", no_wrap=False)
+    table = HelpTable()
 
-    def section(title: str) -> None:
-        table.add_row("", "", "")  # blank line before section
-        table.add_row(f"[bold cyan]{title}[/]", "", "")
+    table.add_section("Data")
+    table.add_command("fetch", "[mode] [lookback]", "Fetch data (current/historical)")
+    table.add_command("explore", "", "Show data statistics and correlations")
+    table.add_command("show", "", "Show current data summary")
 
-    def row(cmd: str, args: str, desc: str) -> None:
-        table.add_row(
-            f"[cyan]{cmd}[/]" if cmd else "",
-            f"[dim]{args}[/]" if args else "",
-            desc,
-        )
+    table.add_section("Models")
+    table.add_command("train", "<model> [iters]", "Train a model (SARIMAX/Prophet/LSTM)")
+    table.add_command("load", "<model> [path]", "Load model from file (default: models/<model>_model.joblib)")
+    table.add_command("save", "[path]", "Save current model")
+    table.add_command("models", "", "List available models")
 
-    section("Data")
-    row("fetch", "[mode] [lookback]", "Fetch data (current/historical)")
-    row("explore", "", "Show data statistics and correlations")
-    row("show", "", "Show current data summary")
+    table.add_section("Prediction")
+    table.add_command("predict", "[periods]", "Make predictions")
+    table.add_command("compare", "[periods] [--fast|--full] [--holdout N] [--timeout S]", "Compare all models (fast by default, scored on holdout)")
+    table.add_command("benchmark", "[holdout]", "Train all models, score on held-out tail (alias for compare --full)")
 
-    section("Models")
-    row("train", "<model> [iters]", "Train a model (SARIMAX/Prophet/LSTM)")
-    row("load", "<model> [path]", "Load model from file (default: models/<model>_model.joblib)")
-    row("save", "[path]", "Save current model")
-    row("models", "", "List available models")
+    table.add_section("Backtesting")
+    table.add_command("backtest", "[strategy] [params]", "Run backtest")
+    table.add_command("strategies", "", "List available strategies")
 
-    section("Prediction")
-    row("predict", "[periods]", "Make predictions")
-    row("compare", "[periods] [--fast|--full] [--holdout N] [--timeout S]", "Compare all models (fast by default, scored on holdout)")
-    row("benchmark", "[holdout]", "Train all models, score on held-out tail (alias for compare --full)")
-
-    section("Backtesting")
-    row("backtest", "[strategy] [params]", "Run backtest")
-    row("strategies", "", "List available strategies")
-
-    section("System")
-    row("help", "", "Show this help")
-    row("status", "", "Show current state")
-    row("clear", "", "Clear screen")
-    row("exit / quit", "", "Exit REPL")
+    table.add_section("System")
+    table.add_command("help", "", "Show this help")
+    table.add_command("status", "", "Show current state")
+    table.add_command("clear", "", "Clear screen")
+    table.add_command("exit / quit", "", "Exit REPL")
 
     return table
 
@@ -111,7 +105,7 @@ def _build_help_table() -> Table:
 def print_help(args: list[str]) -> None:
     """Print REPL help."""
     table = _build_help_table()
-    console.print(Panel(table, title="REPL Help", border_style="blue", padding=(1, 1)))
+    console.print(Panel(table, title="REPL Help", border_style="ui.border", padding=(1, 1)))
 
 
 def print_status(args: list[str]) -> None:
@@ -125,18 +119,9 @@ def print_status(args: list[str]) -> None:
     pred_str = str(pred_rows) if _state["predictions"] is not None else "—"
 
     if verbose:
-        table = Table(title="REPL Status", box=box.MINIMAL, show_header=False, padding=(0, 1))
-        table.add_column("Item", style="cyan", no_wrap=True, width=14)
-        table.add_column("Value", style="green")
-        table.add_row("Data", data_str)
-        table.add_row("Model", model_str)
-        table.add_row("Model Path", path_str)
-        table.add_row("Predictions", pred_str)
-        console.print(table)
+        print_verbose_status(data_str, model_str, path_str, pred_str)
     else:
-        console.print(
-            f"[dim]data[/] {data_str}  [dim]· model[/] {model_str}  [dim]· path[/] {path_str}  [dim]· preds[/] {pred_str}"
-        )
+        print_inline_status(data_str, model_str, path_str, pred_str)
 
 
 def cmd_fetch(args: list[str]) -> None:
@@ -144,11 +129,11 @@ def cmd_fetch(args: list[str]) -> None:
     mode = args[0] if args else "current"
     lookback = int(args[1]) if len(args) > 1 else SETTINGS.default_lookback_days
 
-    with console.status(f"[bold green]Fetching {mode} data ({lookback}d)..."):
+    with console.status(f"[status.running]Fetching {mode} data ({lookback}d)..."):
         data = fetch_with_retry(_as_mode(mode), lookback)
 
     if data.empty:
-        console.print("[red]Failed to fetch data[/red]")
+        console.print("[error]Failed to fetch data[/error]")
         return
 
     _state["data"] = data
@@ -158,16 +143,25 @@ def cmd_fetch(args: list[str]) -> None:
 def cmd_explore(args: list[str]) -> None:
     """Explore data command."""
     if _state["data"] is None:
-        console.print("[yellow]No data loaded. Use 'fetch' first.[/yellow]")
+        console.print("[warning]No data loaded. Use 'fetch' first.[/warning]")
         return
 
     print_data_summary(_state["data"], "Data Exploration")
 
     # Correlation matrix
-    corr_table = Table(title="Correlation Matrix")
-    corr_table.add_column("", style="cyan")
+    corr_table = Table(
+        title="Correlation Matrix",
+        title_style="panel.title",
+        box=None,
+        padding=(0, 1),
+        collapse_padding=True,
+        header_style="table.header",
+        row_styles=["table.row_even", "table.row_odd"],
+    )
+    corr_table.add_column("", style="brand", no_wrap=True)
     for col in ["open", "high", "low", "close", "volume"]:
-        corr_table.add_column(col, style="green")
+        from ..viz.components import DATA_STYLES
+        corr_table.add_column(col, style=DATA_STYLES.get(col, "ui.text"), justify="right")
 
     corr = _state["data"][["open", "high", "low", "close", "volume"]].corr()  # type: ignore[union-attr]
     for idx, row in corr.iterrows():
@@ -179,7 +173,7 @@ def cmd_explore(args: list[str]) -> None:
 def cmd_show(args: list[str]) -> None:
     """Show current data."""
     if _state["data"] is None:
-        console.print("[yellow]No data loaded.[/yellow]")
+        console.print("[warning]No data loaded.[/warning]")
         return
     print_data_summary(_state["data"], "Current Data")
 
@@ -187,23 +181,23 @@ def cmd_show(args: list[str]) -> None:
 def cmd_train(args: list[str]) -> None:
     """Train model command."""
     if _state["data"] is None:
-        console.print("[yellow]No data loaded. Use 'fetch' first.[/yellow]")
+        console.print("[warning]No data loaded. Use 'fetch' first.[/warning]")
         return
 
     if not args:
-        console.print("[red]Usage: train <model> [iterations][/red]")
+        console.print("[error]Usage: train <model> [iterations][/error]")
         return
 
     model_name = args[0]
     if model_name not in MODEL_REGISTRY:
         console.print(
-            f"[red]Unknown model: {model_name}. Available: {list(MODEL_REGISTRY.keys())}[/red]"
+            f"[error]Unknown model: {model_name}. Available: {list(MODEL_REGISTRY.keys())}[/error]"
         )
         return
 
     iterations = int(args[1]) if len(args) > 1 else SETTINGS.default_iterations
 
-    with console.status(f"[bold green]Training {model_name}..."):
+    with console.status(f"[status.running]Training {model_name}..."):
         model_instance = create_model(model_name)
         model_instance.fit(_state["data"], iterations=iterations)
 
@@ -213,13 +207,13 @@ def cmd_train(args: list[str]) -> None:
     default_path = f"models/{model_name.lower()}_model.joblib"
     model_instance.save(default_path)
     _state["model_path"] = default_path
-    console.print(f"[green]{model_name} trained and saved to {default_path}[/green]")
+    console.print(f"[success]{model_name} trained and saved to {default_path}[/success]")
 
 
 def cmd_load(args: list[str]) -> None:
     """Load model command."""
     if len(args) < _MIN_ARGS_LOAD:
-        console.print("[red]Usage: load <model> [path][/red]")
+        console.print("[error]Usage: load <model> [path][/error]")
         return
 
     model_name = args[0]
@@ -227,26 +221,26 @@ def cmd_load(args: list[str]) -> None:
     path = args[1] if len(args) > 1 else default_path
 
     if model_name not in MODEL_REGISTRY:
-        console.print(f"[red]Unknown model: {model_name}[/red]")
+        console.print(f"[error]Unknown model: {model_name}[/error]")
         return
 
     try:
-        with console.status(f"[bold green]Loading {model_name} from {path}..."):
+        with console.status(f"[status.running]Loading {model_name} from {path}..."):
             model_class = MODEL_REGISTRY[model_name]
             model_instance = model_class.load(path)
 
         _state["model"] = model_instance
         _state["model_name"] = model_name
         _state["model_path"] = path
-        console.print(f"[green]{model_name} loaded from {path}[/green]")
+        console.print(f"[success]{model_name} loaded from {path}[/success]")
     except Exception as e:
-        console.print(f"[red]Failed to load model: {e}[/red]")
+        console.print(f"[error]Failed to load model: {e}[/error]")
 
 
 def cmd_save(args: list[str]) -> None:
     """Save model command."""
     if _state["model"] is None:
-        console.print("[yellow]No model trained/loaded.[/yellow]")
+        console.print("[warning]No model trained/loaded.[/warning]")
         return
 
     model_name = _state["model_name"]
@@ -256,17 +250,25 @@ def cmd_save(args: list[str]) -> None:
     try:
         _state["model"].save(path)
         _state["model_path"] = path
-        console.print(f"[green]Model saved to {path}[/green]")
+        console.print(f"[success]Model saved to {path}[/success]")
     except Exception as e:
-        console.print(f"[red]Failed to save model: {e}[/red]")
+        console.print(f"[error]Failed to save model: {e}[/error]")
 
 
 def cmd_models(args: list[str]) -> None:
     """List available models."""
-    table = Table(title="Available Models")
-    table.add_column("Name", style="cyan")
-    table.add_column("Class", style="green")
-    table.add_column("Description", style="yellow")
+    table = Table(
+        title="Available Models",
+        title_style="panel.title",
+        box=None,
+        padding=(0, 1),
+        collapse_padding=True,
+        header_style="table.header",
+        row_styles=["table.row_even", "table.row_odd"],
+    )
+    table.add_column("Name", style="brand")
+    table.add_column("Class", style="success")
+    table.add_column("Description", style="warning")
 
     descriptions = {
         "SARIMAX": "Seasonal ARIMA with exogenous variables (pmdarima)",
@@ -283,16 +285,16 @@ def cmd_models(args: list[str]) -> None:
 def cmd_predict(args: list[str]) -> None:
     """Predict command."""
     if _state["model"] is None:
-        console.print("[yellow]No model loaded. Use 'train' or 'load' first.[/yellow]")
+        console.print("[warning]No model loaded. Use 'train' or 'load' first.[/warning]")
         return
 
     periods = int(args[0]) if args else SETTINGS.default_prediction_periods
 
     try:
-        with console.status("[bold green]Generating predictions..."):
+        with console.status("[status.running]Generating predictions..."):
             if _state["model_name"] == "LSTM":
                 if _state["data"] is None:
-                    console.print("[red]LSTM requires data context. Fetch data first.[/red]")
+                    console.print("[error]LSTM requires data context. Fetch data first.[/error]")
                     return
                 predictions = _state["model"].predict_with_context(_state["data"], periods)
             else:
@@ -304,32 +306,7 @@ def cmd_predict(args: list[str]) -> None:
         )
 
     except Exception as e:
-        console.print(f"[red]Prediction failed: {e}[/red]")
-
-
-def _print_model_comparison(results: dict, title: str = "Model Comparison") -> None:
-    """Print model comparison table."""
-    table = Table(title=title)
-    table.add_column("Model", style="cyan")
-    table.add_column("Status", style="green")
-    table.add_column("RMSE", style="yellow")
-    table.add_column("MAE", style="yellow")
-    table.add_column("MAPE", style="magenta")
-    table.add_column("Info", style="dim")
-    table.add_column("Time", style="blue")
-
-    for name, info in results.items():
-        table.add_row(
-            name,
-            info.get("status", "N/A"),
-            str(info.get("rmse", "N/A")),
-            str(info.get("mae", "N/A")),
-            str(info.get("mape", "N/A")),
-            str(info.get("info", "N/A"))[:60],
-            str(info.get("elapsed", "N/A")),
-        )
-
-    console.print(table)
+        console.print(f"[error]Prediction failed: {e}[/error]")
 
 
 def _compute_metrics(actual: np.ndarray, predicted: np.ndarray) -> dict[str, float]:
@@ -342,18 +319,9 @@ def _compute_metrics(actual: np.ndarray, predicted: np.ndarray) -> dict[str, flo
     return {"rmse": rmse, "mae": mae, "mape": mape}
 
 
-def _make_progress(description: str) -> Progress:
+def _make_progress(description: str) -> ProgressBar:
     """Create a rich Progress with spinner+bar for model training."""
-    return Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(bar_width=None),
-        TaskProgressColumn(),
-        MofNCompleteColumn(),
-        TimeElapsedColumn(),
-        console=console,
-        transient=True,
-    )
+    return ProgressBar()
 
 
 def _silence_model_loggers() -> dict[str, int]:
@@ -368,7 +336,6 @@ def _silence_model_loggers() -> dict[str, int]:
         lg = logging.getLogger(n)
         prev[n] = lg.level
         lg.setLevel(logging.WARNING)
-    # also root pmdarima/prophet loggers could leak
     for n in ["pmdarima", "prophet"]:
         lg = logging.getLogger(n)
         prev[n] = lg.level
@@ -386,17 +353,17 @@ def _parse_holdout_flag(args: list[str], idx: int, holdout: int | None) -> tuple
     a = args[idx]
     if a == "--holdout":
         if idx + 1 >= len(args):
-            console.print("[red]--holdout requires value[/red]")
+            console.print("[error]--holdout requires value[/error]")
             return holdout, idx
         try:
             return int(args[idx + 1]), idx + 1
         except ValueError:
-            console.print(f"[red]Invalid --holdout value: {args[idx + 1]}[/red]")
+            console.print(f"[error]Invalid --holdout value: {args[idx + 1]}[/error]")
             return holdout, idx + 1
     try:
         return int(a.split("=", 1)[1]), idx
     except ValueError:
-        console.print(f"[red]Invalid --holdout value: {a}[/red]")
+        console.print(f"[error]Invalid --holdout value: {a}[/error]")
         return holdout, idx
 
 
@@ -405,17 +372,17 @@ def _parse_timeout_flag(args: list[str], idx: int, timeout: int | None) -> tuple
     a = args[idx]
     if a == "--timeout":
         if idx + 1 >= len(args):
-            console.print("[red]--timeout requires value[/red]")
+            console.print("[error]--timeout requires value[/error]")
             return timeout, idx, False
         try:
             return int(args[idx + 1]), idx + 1, True
         except ValueError:
-            console.print(f"[red]Invalid --timeout value: {args[idx + 1]}[/red]")
+            console.print(f"[error]Invalid --timeout value: {args[idx + 1]}[/error]")
             return timeout, idx + 1, False
     try:
         return int(a.split("=", 1)[1]), idx, True
     except ValueError:
-        console.print(f"[red]Invalid --timeout value: {a}[/red]")
+        console.print(f"[error]Invalid --timeout value: {a}[/error]")
         return timeout, idx, False
 
 
@@ -443,7 +410,7 @@ def _parse_compare_args(args: list[str]) -> tuple[int, bool, int | None, int | N
         elif a == "--timeout" or a.startswith("--timeout="):
             timeout, i, timeout_explicit = _parse_timeout_flag(args, i, timeout)
         elif a.startswith("--"):
-            console.print(f"[yellow]Unknown flag: {a}[/yellow]")
+            console.print(f"[warning]Unknown flag: {a}[/warning]")
         else:
             remaining.append(a)
         i += 1
@@ -451,7 +418,7 @@ def _parse_compare_args(args: list[str]) -> tuple[int, bool, int | None, int | N
         with contextlib.suppress(ValueError):
             periods = int(remaining[0])
         if periods != SETTINGS.default_prediction_periods:
-            console.print(f"[red]Invalid periods: {remaining[0]}[/red]")
+            console.print(f"[error]Invalid periods: {remaining[0]}[/error]")
         if len(remaining) > 1 and holdout is None:
             with contextlib.suppress(ValueError):
                 holdout = int(remaining[1])
@@ -470,10 +437,10 @@ def _resolve_compare_params(
     if holdout is None:
         holdout = periods if len(data) > periods + 10 else 0
     if holdout is not None and holdout != 0 and len(data) <= holdout:
-        console.print(f"[yellow]Not enough data for holdout={holdout}, disabling scoring[/yellow]")
+        console.print(f"[warning]Not enough data for holdout={holdout}, disabling scoring[/warning]")
         holdout = 0
     if holdout is not None and holdout != 0 and holdout < _MIN_HOLDOUT:
-        console.print("[red]Holdout must be >=2, disabling scoring[/red]")
+        console.print("[error]Holdout must be >=2, disabling scoring[/error]")
         holdout = 0
 
     scored = holdout is not None and holdout != 0
@@ -507,17 +474,17 @@ def _resolve_mode_params(fast: bool) -> tuple[range, int, int]:
 
 
 def _make_progress_callback(
-    progress: Progress, model_name: str, task_id: TaskID, total: int
+    progress: ProgressBar, model_name: str, task_id: TaskID, total: int
 ):
     """Build a progress callback bound to (progress, model_name, task_id, total)."""
     def _cb(col_or_epoch: str, val: int, done: int) -> None:
         try:
             if model_name == "SARIMAX":
-                progress.update(task_id, completed=done, description=f"[cyan]{model_name} {col_or_epoch} m={val}")
+                progress.update(task_id, completed=done, description=f"[brand]{model_name} {col_or_epoch} m={val}[/]")
             elif model_name == "Prophet":
-                progress.update(task_id, completed=done, description=f"[cyan]{model_name} {col_or_epoch}")
+                progress.update(task_id, completed=done, description=f"[brand]{model_name} {col_or_epoch}[/]")
             elif model_name == "LSTM":
-                progress.update(task_id, completed=val, description=f"[cyan]{model_name} epoch {val}/{total}")
+                progress.update(task_id, completed=val, description=f"[brand]{model_name} epoch {val}/{total}[/]")
         except Exception:
             pass
     return _cb
@@ -544,6 +511,23 @@ def _build_fit_kwargs(
     return fit_kwargs
 
 
+def _format_model_info(model_instance, name: str) -> str:
+    """Format compact info string for table."""
+    try:
+        if name == "SARIMAX" and hasattr(model_instance, "best_m_values"):
+            bm = getattr(model_instance, "best_m_values", {})
+            if bm:
+                return "best_m=" + ",".join(f"{k}:{v}" for k, v in bm.items())
+            return "no best_m"
+        if name == "Prophet" and hasattr(model_instance, "daily_period"):
+            return f"daily={model_instance.daily_period} weekly={model_instance.weekly_period}"
+        if name == "LSTM" and hasattr(model_instance, "device"):
+            return f"epochs={model_instance.epochs} device={model_instance.device}"
+        return type(model_instance).__name__
+    except Exception:
+        return "N/A"
+
+
 def _score_predictions(
     model_instance,
     name: str,
@@ -556,7 +540,7 @@ def _score_predictions(
     predicted_close = predictions["close"].to_numpy(dtype=float)
     if actual_close is None or len(predicted_close) == 0:
         info_str = _format_model_info(model_instance, name)
-        pending_logs.append(("green", f"{name}: Done ({elapsed_str}) - {info_str}"))
+        pending_logs.append(("success", f"{name}: Done ({elapsed_str}) - {info_str}"))
         return {
             "status": "Success",
             "rmse": "N/A",
@@ -575,7 +559,7 @@ def _score_predictions(
 
     if np.isnan(predicted_close).any():
         info = _format_model_info(model_instance, name) + " (incomplete)"
-        pending_logs.append(("yellow", f"{name}: Timeout/partial - {elapsed_str} - {info}"))
+        pending_logs.append(("warning", f"{name}: Timeout/partial - {elapsed_str} - {info}"))
         return {
             "status": "Timeout (partial)",
             "rmse": "N/A",
@@ -588,7 +572,7 @@ def _score_predictions(
     metrics = _compute_metrics(actual_close_trim, predicted_close)
     info = _format_model_info(model_instance, name)
     if any(np.isnan(v) for v in metrics.values()):
-        pending_logs.append(("yellow", f"{name}: Partial - no valid close prediction ({elapsed_str})"))
+        pending_logs.append(("warning", f"{name}: Partial - no valid close prediction ({elapsed_str})"))
         return {
             "status": "Partial",
             "rmse": "N/A",
@@ -599,7 +583,7 @@ def _score_predictions(
         }
     pending_logs.append(
         (
-            "green",
+            "success",
             f"{name}: RMSE={metrics['rmse']:.4f} MAE={metrics['mae']:.4f} MAPE={metrics['mape']:.2f}% ({elapsed_str})",
         )
     )
@@ -616,7 +600,7 @@ def _score_predictions(
 def _handle_interrupt(name: str, start: float, pending_logs: list[tuple[str, str]]) -> dict:
     """Build interrupted-row dict for results."""
     elapsed = time.time() - start
-    pending_logs.append(("yellow", f"{name}: Interrupted ({elapsed:.1f}s)"))
+    pending_logs.append(("warning", f"{name}: Interrupted ({elapsed:.1f}s)"))
     return {
         "status": "Interrupted",
         "rmse": "N/A",
@@ -630,7 +614,7 @@ def _handle_interrupt(name: str, start: float, pending_logs: list[tuple[str, str
 def _handle_failure(name: str, start: float, exc: Exception, pending_logs: list[tuple[str, str]]) -> dict:
     """Build failed-row dict for results."""
     elapsed = time.time() - start
-    pending_logs.append(("red", f"{name}: Failed - {exc} ({elapsed:.1f}s)"))
+    pending_logs.append(("error", f"{name}: Failed - {exc} ({elapsed:.1f}s)"))
     return {
         "status": f"Failed: {exc}",
         "rmse": "N/A",
@@ -645,7 +629,7 @@ def _train_and_predict_one(
     name: str,
     train_df: pd.DataFrame,
     predict_periods: int,
-    progress: Progress,
+    progress: ProgressBar,
     task_ids: dict[str, TaskID],
     scored: bool,
     holdout: int | None,
@@ -667,7 +651,7 @@ def _train_and_predict_one(
     else:
         status_text.plain = f"train {len(train_df)} · predict {periods} · {mode_label} | {name} training..."
     progress.start_task(task_ids[name])
-    progress.update(task_ids[name], description=f"[cyan]{name} training...")
+    progress.update(task_ids[name], description=f"[brand]{name} training...[/]")
 
     try:
         model_instance = create_model(name)
@@ -678,8 +662,8 @@ def _train_and_predict_one(
         try:
             model_instance.fit(train_df, **fit_kwargs)
         except KeyboardInterrupt:
-            pending_logs.append(("yellow", f"{name}: interrupted by user, keeping best so far"))
-        progress.update(task_ids[name], completed=total, description=f"[green]{name} training done")
+            pending_logs.append(("warning", f"{name}: interrupted by user, keeping best so far"))
+        progress.update(task_ids[name], completed=total, description=f"[success]{name} training done[/]")
 
         status_text.plain = (
             f"train {len(train_df)} · holdout {holdout} · {mode_label} | {name} predicting..."
@@ -708,15 +692,7 @@ def _run_compare_core(
     holdout: int | None,
     timeout: int | None,
 ) -> dict[str, dict]:
-    """Core compare logic with dual-area Live (status + progress bar).
-
-    Status area (top) shows train/holdout/mode/timeout + current model.
-    Progress area (bottom) shows a single transient Progress bar - never
-    interleaves with status lines. INFO logs silenced to avoid bar corruption.
-
-    If holdout is None, auto = periods (scored). If holdout==0, no scoring.
-    Returns results dict for table.
-    """
+    """Core compare logic with dual-area Live (status + progress bar)."""
     holdout, train_df, actual_close, scored, predict_periods = _resolve_compare_params(
         data, periods, fast, holdout
     )
@@ -727,18 +703,9 @@ def _run_compare_core(
         header_plain = f"train {len(train_df)} · holdout {holdout} · {mode_label} · {timeout}s timeout"
     else:
         header_plain = f"train {len(train_df)} · predict {periods} · {mode_label} · {timeout}s timeout"
-    status_text = Text(header_plain, style="dim")
+    status_text = Text(header_plain, style="ui.text_dim")
 
-    progress = Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(bar_width=None),
-        TaskProgressColumn(),
-        MofNCompleteColumn(),
-        TimeElapsedColumn(),
-        console=console,
-        transient=True,
-    )
+    progress = ProgressBar()
     task_ids: dict[str, TaskID] = {}
     for _name in MODEL_REGISTRY:
         if _name == "SARIMAX":
@@ -780,48 +747,24 @@ def _run_compare_core(
     finally:
         _restore_model_loggers(prev_log_levels)
 
-    console.print(f"[dim]{header_plain}[/]")
+    console.print(f"[ui.text_dim]{header_plain}[/]")
     for style, msg in pending_logs:
         console.print(f"[{style}]{msg}[/]")
 
     return results
 
 
-def _format_model_info(model_instance, name: str) -> str:
-    """Format compact info string for table."""
-    try:
-        if name == "SARIMAX" and hasattr(model_instance, "best_m_values"):
-            bm = getattr(model_instance, "best_m_values", {})
-            if bm:
-                # show best m per column compactly
-                return "best_m=" + ",".join(f"{k}:{v}" for k, v in bm.items())
-            return "no best_m"
-        if name == "Prophet" and hasattr(model_instance, "daily_period"):
-            return f"daily={model_instance.daily_period} weekly={model_instance.weekly_period}"
-        if name == "LSTM" and hasattr(model_instance, "device"):
-            return f"epochs={model_instance.epochs} device={model_instance.device}"
-        # fallback
-        return type(model_instance).__name__
-    except Exception:
-        return "N/A"
-
-
 def cmd_benchmark(args: list[str]) -> None:
     """Train all models and score predictions on a held-out tail of the data."""
     if _state["data"] is None:
-        console.print("[yellow]No data loaded. Use 'fetch' first.[/yellow]")
+        console.print("[warning]No data loaded. Use 'fetch' first.[/warning]")
         return
 
-    # benchmark defaults to full (not fast) unless --fast flag given
-    # support both old style: benchmark 24  and new flags
-    # if args contains --fast/--full use parse, else treat first arg as holdout and full=True
     has_flag = any(a.startswith("--") for a in args)
     if has_flag:
         periods, fast, holdout, timeout = _parse_compare_args(args)
-        # benchmark typically scored, so holdout defaults to periods
         if holdout is None:
             holdout = periods
-        # benchmark defaults to full regardless of parse unless explicitly --fast
         if "--fast" not in args and "--full" not in args:
             fast = False
         results = _run_compare_core(_state["data"], periods, fast, holdout, timeout)
@@ -829,42 +772,41 @@ def cmd_benchmark(args: list[str]) -> None:
     else:
         holdout = int(args[0]) if args else SETTINGS.default_prediction_periods
         if holdout < _MIN_HOLDOUT:
-            console.print("[red]Holdout must be >= 2 periods.[/red]")
+            console.print("[error]Holdout must be >= 2 periods.[/error]")
             return
         if len(_state["data"]) <= holdout:
-            console.print(f"[red]Need more than {holdout} rows; have {len(_state['data'])}.[/red]")
+            console.print(f"[error]Need more than {holdout} rows; have {len(_state['data'])}.[/error]")
             return
-        # legacy "benchmark N" path = --full style, use the full timeout preset
         results = _run_compare_core(
             _state["data"], holdout, False, holdout, SETTINGS.compare_full_timeout_seconds
         )
         title = f"Benchmark (holdout={holdout})"
 
-    _print_model_comparison(results, title=title)
+    print_model_comparison(results, title=title)
 
 
 def cmd_compare(args: list[str]) -> None:
     """Compare all models - fast, scored, progress, cancellable, timeout."""
     if _state["data"] is None:
-        console.print("[yellow]No data loaded. Use 'fetch' first.[/yellow]")
+        console.print("[warning]No data loaded. Use 'fetch' first.[/warning]")
         return
 
     periods, fast, holdout, timeout = _parse_compare_args(args)
     results = _run_compare_core(_state["data"], periods, fast, holdout, timeout)
     holdout_str = holdout if holdout is not None else periods
     title = f"Model Comparison (periods={periods} holdout={holdout_str} {'fast' if fast else 'full'})"
-    _print_model_comparison(results, title=title)
-    console.print("[dim]Tip: compare --full --holdout 24 --timeout 300 for full sweep; compare --holdout 0 for unscored[/dim]")
+    print_model_comparison(results, title=title)
+    console.print("[ui.text_dim]Tip: compare --full --holdout 24 --timeout 300 for full sweep; compare --holdout 0 for unscored[/]")
 
 
 def cmd_backtest(args: list[str]) -> None:
     """Backtest command."""
     if _state["model"] is None:
-        console.print("[yellow]No model loaded. Use 'train' or 'load' first.[/yellow]")
+        console.print("[warning]No model loaded. Use 'train' or 'load' first.[/warning]")
         return
 
     if _state["data"] is None:
-        console.print("[yellow]No data loaded. Use 'fetch' first.[/yellow]")
+        console.print("[warning]No data loaded. Use 'fetch' first.[/warning]")
         return
 
     strategy = args[0] if args else "exit_after_n"
@@ -873,7 +815,7 @@ def cmd_backtest(args: list[str]) -> None:
 
     test_data = _state["data"].iloc[-lookback:]
 
-    with console.status("[bold green]Running backtest..."):
+    with console.status("[status.running]Running backtest..."):
         result = run_backtest(
             _state["model"],
             test_data,
@@ -887,10 +829,18 @@ def cmd_backtest(args: list[str]) -> None:
 
 def cmd_strategies(args: list[str]) -> None:
     """List available strategies."""
-    table = Table(title="Available Strategies")
-    table.add_column("Name", style="cyan")
-    table.add_column("Class", style="green")
-    table.add_column("Description", style="yellow")
+    table = Table(
+        title="Available Strategies",
+        title_style="panel.title",
+        box=None,
+        padding=(0, 1),
+        collapse_padding=True,
+        header_style="table.header",
+        row_styles=["table.row_even", "table.row_odd"],
+    )
+    table.add_column("Name", style="brand")
+    table.add_column("Class", style="success")
+    table.add_column("Description", style="warning")
 
     descriptions = {
         "exit_after_n": "Enter on prediction direction, exit after N bars",
@@ -935,39 +885,38 @@ def run_repl() -> None:
     console.print()
     console.print(
         Panel(
-            "[bold bright_cyan]SARIMAX OHLCV Prediction REPL[/]\n"
-            "[dim]Type 'help' for commands, 'exit' to quit[/]",
-            border_style="bright_cyan",
+            f"[brand]SARIMAX OHLCV Prediction REPL[/]\n"
+            f"[ui.text_dim]Type 'help' for commands, 'exit' to quit[/]",
+            border_style="brand",
             padding=(0, 1),
-            style="on blue",
         )
     )
 
     while True:
         try:
-            line = Prompt.ask("[bold bright_cyan]sarimax>[/]")
+            line = Prompt.ask("[prompt]▸ repl[/]")
             cmd, args = parse_command(line)
 
             if not cmd:
                 continue
 
             if cmd in ("exit", "quit"):
-                console.print("[yellow]Goodbye![/yellow]")
+                console.print("[warning]Goodbye![/warning]")
                 break
 
             handler = _CMD_HANDLERS.get(cmd)
             if handler:
                 handler(args)
             else:
-                console.print(f"[red]Unknown command: {cmd}. Type 'help' for commands.[/red]")
+                console.print(f"[error]Unknown command: {cmd}. Type 'help' for commands.[/error]")
 
         except KeyboardInterrupt:
-            console.print("\n[yellow]Use 'exit' to quit[/yellow]")
+            console.print("\n[warning]Use 'exit' to quit[/warning]")
         except EOFError:
-            console.print("\n[yellow]Goodbye![/yellow]")
+            console.print("\n[warning]Goodbye![/warning]")
             break
         except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
+            console.print(f"[error]Error: {e}[/error]")
 
 
 if __name__ == "__main__":

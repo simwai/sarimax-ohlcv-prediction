@@ -7,7 +7,6 @@ from .plotly import (
 )
 from .rich import (
     console,
-    create_live_layout,
     print_backtest_results,
     print_data_summary,
     print_model_comparison,
@@ -24,6 +23,5 @@ __all__ = [
     "print_model_comparison",
     "print_predictions_table",
     "print_backtest_results",
-    "create_live_layout",
     "status_spinner",
 ]
