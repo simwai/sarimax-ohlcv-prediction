@@ -6,10 +6,21 @@ from dataclasses import dataclass
 import pandas as pd
 import vectorbt as vbt
 
-from ..models.base import BaseModel
+from ..models.base import BaseModel, ModelBase
+from ..viz.components import print_backtest_results
 from .strategies import BaseStrategy, get_strategy
 
 logger = logging.getLogger(__name__)
+
+_DATA_EMPTY_MSG = "backtest data is empty"
+_LOOKBACK_POSITIVE_MSG = "lookback must be positive, got {lookback}"
+_LOOKBACK_EXCEEDS_MSG = "lookback {lookback} exceeds data length {data_len}"
+_TEST_DATA_EMPTY_MSG = "test_data is empty after slicing"
+_NOT_DATAFRAME_MSG = "model.predict returned {got}, expected DataFrame"
+_PRED_EMPTY_MSG = "model predictions empty"
+_PRED_MISSING_COLS_MSG = "predictions missing columns: {missing}"
+_PRED_LEN_MISMATCH_MSG = "predictions length {got} != expected {expected}"
+_PRED_NAN_MSG = "predictions contain NaN"
 
 
 @dataclass
@@ -28,7 +39,7 @@ class BacktestResult:
     stats: pd.Series
 
 
-def run_backtest(
+def run_backtest(  # noqa: PLR0912
     model: BaseModel,
     data: pd.DataFrame,
     strategy_name: str = "exit_after_n",
@@ -48,22 +59,54 @@ def run_backtest(
 
     Returns:
         BacktestResult with performance metrics
+
+    Raises:
+        ValueError: if data is empty, lookback invalid, or predictions malformed
+        TypeError: if model returns wrong type
+        RuntimeError: if model not fitted
+        NotImplementedError: if LSTM predict() called without context
     """
+    if data.empty:
+        raise ValueError(_DATA_EMPTY_MSG)  # noqa: TRY003
+    if lookback is not None and lookback <= 0:
+        raise ValueError(_LOOKBACK_POSITIVE_MSG.format(lookback=lookback))  # noqa: TRY003
     lookback = lookback or len(data)
+    if lookback > len(data):
+        raise ValueError(  # noqa: TRY003
+            _LOOKBACK_EXCEEDS_MSG.format(lookback=lookback, data_len=len(data))
+        )
     test_data = data.iloc[-lookback:].copy()
+
+    if test_data.empty:
+        raise ValueError(_TEST_DATA_EMPTY_MSG)  # noqa: TRY003
 
     logger.info("Running backtest on %d bars with strategy: %s", len(test_data), strategy_name)
 
-    # Simplified: use model's predict on the whole test set
-    # This is not true walk-forward but gives a baseline
+    # Fail-fast prediction - no silent fallback to perfect predictions
     n_periods = len(test_data)
-    try:
+    is_context_model = type(model).predict_with_context is not ModelBase.predict_with_context
+    if is_context_model:
+        predictions = model.predict_with_context(data, n_periods)
+    else:
         predictions = model.predict(n_periods)
-        predictions.index = test_data.index
-    except Exception:
-        logger.exception("Prediction failed")
-        # Fallback: use actual data as "perfect" predictions for testing
-        predictions = test_data[["open", "high", "low", "close", "volume"]].copy()
+
+    if not isinstance(predictions, pd.DataFrame):
+        raise TypeError(  # noqa: TRY003
+            _NOT_DATAFRAME_MSG.format(got=type(predictions).__name__)
+        )
+    if predictions.empty:
+        raise ValueError(_PRED_EMPTY_MSG)  # noqa: TRY003
+    expected_cols = ["open", "high", "low", "close", "volume"]
+    missing = [c for c in expected_cols if c not in predictions.columns]
+    if missing:
+        raise ValueError(_PRED_MISSING_COLS_MSG.format(missing=missing))  # noqa: TRY003
+    if len(predictions) != n_periods:
+        raise ValueError(  # noqa: TRY003
+            _PRED_LEN_MISMATCH_MSG.format(got=len(predictions), expected=n_periods)
+        )
+    if predictions.isna().any().any():
+        raise ValueError(_PRED_NAN_MSG)  # noqa: TRY003
+    predictions.index = test_data.index
 
     # Get strategy
     strategy: BaseStrategy = get_strategy(strategy_name)
@@ -161,21 +204,12 @@ def _stat_int(stats: pd.Series, key: str) -> int:
 
 
 def print_backtest_result(result: BacktestResult) -> None:
-    """Pretty print backtest results."""
-    from rich.console import Console
-    from rich.table import Table
-
-    console = Console()
-    table = Table(title="Backtest Results")
-    table.add_column("Metric", style="cyan")
-    table.add_column("Value", style="green")
-
-    table.add_row("Total Return", f"{result.total_return:.2%}")
-    table.add_row("Sharpe Ratio", f"{result.sharpe_ratio:.2f}")
-    table.add_row("Max Drawdown", f"{result.max_drawdown:.2%}")
-    table.add_row("Win Rate", f"{result.win_rate:.2%}")
-    table.add_row("Total Trades", str(result.total_trades))
-    table.add_row("Avg Trade Return", f"{result.avg_trade_return:.2%}")
-    table.add_row("Profit Factor", f"{result.profit_factor:.2f}")
-
-    console.print(table)
+    """Pretty print backtest results using themed components."""
+    print_backtest_results(
+        total_return=result.total_return,
+        sharpe=result.sharpe_ratio,
+        max_dd=result.max_drawdown,
+        win_rate=result.win_rate,
+        total_trades=result.total_trades,
+        title="Backtest Results",
+    )
