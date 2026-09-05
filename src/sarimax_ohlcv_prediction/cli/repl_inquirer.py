@@ -1,22 +1,27 @@
 """Inquirer-style REPL using prompt_toolkit with autocomplete, history, and fuzzy search."""
 
+from collections.abc import Generator
+from typing import Any
+
 from prompt_toolkit import PromptSession
-from prompt_toolkit.completion import Completer, Completion, FuzzyCompleter
+from prompt_toolkit.completion import CompleteEvent, Completer, Completion, FuzzyCompleter
+from prompt_toolkit.document import Document
+from prompt_toolkit.formatted_text import HTML, AnyFormattedText
 from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.styles import Style
-from prompt_toolkit.formatted_text import HTML
-from prompt_toolkit.shortcuts import CompleteStyle
 from prompt_toolkit.patch_stdout import patch_stdout
+from prompt_toolkit.shortcuts import CompleteStyle
+from prompt_toolkit.styles import Style
 
+from ..viz.rich import console
+from ..viz.theme import ICONS, PALETTE
 from .repl import (
     _CMD_HANDLERS,
     parse_command,
+)
+from .repl import (
     run_repl as run_rich_repl,
 )
-from ..viz.rich import console
-from ..viz.theme import ICONS
-
 
 COMMANDS = sorted(_CMD_HANDLERS.keys())
 
@@ -44,11 +49,15 @@ COMMAND_ARGS = {
 class REPLCompleter(Completer):
     """Context-aware completer for REPL commands."""
 
-    def get_completions(self, document, complete_event):
+    def get_completions(
+        self, document: Document, complete_event: CompleteEvent
+    ) -> Generator[Completion, None, None]:
         text = document.text_before_cursor.lstrip()
         if not text:
             for cmd in COMMANDS:
-                yield Completion(cmd, start_position=0, display=cmd, display_meta=self._get_meta(cmd))
+                yield Completion(
+                    cmd, start_position=0, display=cmd, display_meta=self._get_meta(cmd)
+                )
             return
 
         parts = text.split()
@@ -57,7 +66,12 @@ class REPLCompleter(Completer):
             prefix = parts[0]
             for cmd in COMMANDS:
                 if cmd.startswith(prefix):
-                    yield Completion(cmd, start_position=-len(prefix), display=cmd, display_meta=self._get_meta(cmd))
+                    yield Completion(
+                        cmd,
+                        start_position=-len(prefix),
+                        display=cmd,
+                        display_meta=self._get_meta(cmd),
+                    )
         else:
             # Completing arguments for a command
             cmd = parts[0]
@@ -91,7 +105,7 @@ class REPLCompleter(Completer):
         return metas.get(cmd, "")
 
 
-def create_session():
+def create_session() -> PromptSession:
     """Create a prompt_toolkit session with completer, history, and key bindings."""
     completer = FuzzyCompleter(REPLCompleter())
     history = InMemoryHistory()
@@ -103,28 +117,36 @@ def create_session():
     bindings = KeyBindings()
 
     @bindings.add("c-c")
-    def _(event):
+    def _(event: Any) -> None:  # pyrefly: ignore -- prompt_toolkit event
         event.app.exit(exception=KeyboardInterrupt)
 
     @bindings.add("c-d")
-    def _(event):
+    def _(event: Any) -> None:  # pyrefly: ignore -- prompt_toolkit event
         event.app.exit(exception=EOFError)
 
-    style = Style.from_dict({
-        "prompt": "#00D4AA bold",
-        "completion-menu.completion": "bg:#161B22 #E6EDF3",
-        "completion-menu.completion.current": "bg:#00D4AA #0D1117",
-        "completion-menu.meta.completion": "bg:#161B22 #8B949E",
-        "completion-menu.meta.completion.current": "bg:#00D4AA #0D1117",
-        "scrollbar.background": "bg:#30363D",
-        "scrollbar.button": "bg:#00D4AA",
-        "toolbar": "bg:#161B22 #8B949E",
-    })
+    brand = PALETTE["brand"]
+    surface = PALETTE["surface"]
+    primary = PALETTE["text_primary"]
+    secondary = PALETTE["text_secondary"]
+    bg = PALETTE["bg"]
+    border = PALETTE["border"]
+    style = Style.from_dict(
+        {
+            "prompt": f"{brand} bold",
+            "completion-menu.completion": f"bg:{surface} {primary}",
+            "completion-menu.completion.current": f"bg:{brand} {bg}",
+            "completion-menu.meta.completion": f"bg:{surface} {secondary}",
+            "completion-menu.meta.completion.current": f"bg:{brand} {bg}",
+            "scrollbar.background": f"bg:{border}",
+            "scrollbar.button": f"bg:{brand}",
+            "toolbar": f"bg:{surface} {secondary}",
+        }
+    )
 
-    def get_prompt_tokens():
+    def get_prompt_tokens() -> AnyFormattedText:
         return [("class:prompt", f"{ICONS['prompt']} repl ")]
 
-    def get_bottom_toolbar():
+    def get_bottom_toolbar() -> HTML:
         return HTML(
             "<b>Tab</b>: complete  "
             "<b>↑/↓</b>: history  "
@@ -166,7 +188,9 @@ def run_repl() -> None:
 
     # Try to use prompt_toolkit, fall back to classic REPL if not available
     if not _try_prompt_toolkit():
-        console.print("[warning]Inquirer-style REPL not available, falling back to classic REPL[/warning]")
+        console.print(
+            "[warning]Inquirer-style REPL not available, falling back to classic REPL[/warning]"
+        )
         run_rich_repl()
         return
 

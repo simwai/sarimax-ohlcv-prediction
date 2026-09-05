@@ -15,6 +15,9 @@ from .base import ModelBase
 logger = logging.getLogger(__name__)
 
 _MODEL_NOT_FITTED = "Model not fitted. Call fit() first."
+_BAD_ENVELOPE_MSG = "Unrecognized Prophet model file: {path}"
+_REQUIRED_KEYS = ("models", "columns")
+_PERIODS_MSG = "forecast periods must be an int, got {value!r}"
 
 
 class ProphetModel(ModelBase):
@@ -45,7 +48,10 @@ class ProphetModel(ModelBase):
         self.models = {}
         self.forecasts = {}
 
-        iterations = kwargs.get("iterations", 100)  # Used as prediction periods for fit
+        raw_periods = kwargs.get("forecast_periods", kwargs.get("iterations", 100))
+        if not isinstance(raw_periods, int):
+            raise TypeError(_PERIODS_MSG.format(value=raw_periods))  # noqa: TRY003
+        forecast_periods = raw_periods
         progress_cb = kwargs.get("progress_callback")
 
         for idx, column in enumerate(self.columns):
@@ -77,7 +83,7 @@ class ProphetModel(ModelBase):
             self.models[column] = model
 
             # Generate forecast for later use
-            future = model.make_future_dataframe(periods=iterations, freq="5min")
+            future = model.make_future_dataframe(periods=forecast_periods, freq="5min")
             forecast = model.predict(future)
             self.forecasts[column] = forecast
 
@@ -89,7 +95,7 @@ class ProphetModel(ModelBase):
         if not self.is_fitted:
             raise RuntimeError(_MODEL_NOT_FITTED)
 
-        predictions: dict[str, Any] = {}
+        predictions: dict[str, Any] = {}  # pyrefly: ignore -- forecast arrays
         for column in self.columns:
             if column in self.models:
                 model = self.models[column]
@@ -106,6 +112,7 @@ class ProphetModel(ModelBase):
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(
             {
+                "format": "prophet-v1",
                 "models": self.models,
                 "forecasts": self.forecasts,
                 "columns": self.columns,
@@ -122,8 +129,15 @@ class ProphetModel(ModelBase):
 
     @classmethod
     def load(cls, path: str) -> "ProphetModel":
-        """Load model from disk."""
+        """Load model from disk, rejecting foreign envelopes."""
         data = joblib.load(path)
+        if not isinstance(data, dict) or data.get("format", "prophet-v0") not in (
+            "prophet-v0",
+            "prophet-v1",
+        ):
+            raise ValueError(_BAD_ENVELOPE_MSG.format(path=path))  # noqa: TRY003
+        if any(key not in data for key in _REQUIRED_KEYS):
+            raise ValueError(_BAD_ENVELOPE_MSG.format(path=path))  # noqa: TRY003
         model = cls(
             daily_seasonality=data.get("daily_seasonality", False),
             yearly_seasonality=data.get("yearly_seasonality", False),

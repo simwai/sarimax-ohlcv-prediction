@@ -2,10 +2,12 @@
 
 import logging
 from dataclasses import dataclass
+from typing import Any
 
 import pandas as pd
 import vectorbt as vbt
 
+from ..config import SETTINGS
 from ..models.base import BaseModel, ModelBase
 from ..viz.components import print_backtest_results
 from .strategies import BaseStrategy, get_strategy
@@ -45,7 +47,7 @@ def run_backtest(  # noqa: PLR0912
     strategy_name: str = "exit_after_n",
     exit_bars: int = 5,
     lookback: int | None = None,
-    **strategy_params,
+    **strategy_params: Any,  # pyrefly: ignore -- open strategy params
 ) -> BacktestResult:
     """Run backtest on historical data using model predictions.
 
@@ -117,6 +119,8 @@ def run_backtest(  # noqa: PLR0912
             test_data, predictions, exit_bars=exit_bars, **strategy_params
         )
     else:
+        if exit_bars != SETTINGS.backtest_default_exit_bars:
+            logger.warning("exit_bars is only used by exit_after_n; ignoring for %s", strategy_name)
         entries, exits = strategy.generate_signals(test_data, predictions, **strategy_params)
 
     # Run vectorbt portfolio simulation
@@ -126,10 +130,10 @@ def run_backtest(  # noqa: PLR0912
         close=close_prices,
         entries=entries,
         exits=exits,
-        freq="5min",
-        init_cash=10000,
-        fees=0.001,  # 0.1% fee
-        slippage=0.0005,  # 0.05% slippage
+        freq=SETTINGS.backtest_freq,
+        init_cash=SETTINGS.backtest_init_cash,
+        fees=SETTINGS.backtest_fees,
+        slippage=SETTINGS.backtest_slippage,
     )
 
     stats = _normalize_stats(portfolio.stats())

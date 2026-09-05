@@ -1,16 +1,22 @@
 """Data processing utilities."""
 
+import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 
 from ..config import SETTINGS
+
+_EMPTY_DATA_MSG = "LSTM training data is empty"
+_MISSING_COLS_MSG = "Data missing columns: {missing}"
+_SHORT_DATA_MSG = "Not enough rows ({got}) for sequence length {need}"
+_PERIODS_MSG = "periods must be positive, got {periods}"
 
 
 def prepare_lstm_data(
     data: pd.DataFrame,
     columns: list[str] | None = None,
     sequence_length: int | None = None,
-) -> tuple:
+) -> tuple[np.ndarray, np.ndarray, dict[str, MinMaxScaler]]:
     """Prepare data for LSTM training.
 
     Args:
@@ -22,7 +28,14 @@ def prepare_lstm_data(
         Tuple of (X_train, y_train, scalers_dict)
     """
     cols = columns or ["open", "high", "low", "close", "volume"]
-    seq_len = sequence_length or SETTINGS.lstm_sequence_length
+    seq_len = SETTINGS.lstm_sequence_length if sequence_length is None else sequence_length
+    if data.empty:
+        raise ValueError(_EMPTY_DATA_MSG)  # noqa: TRY003
+    missing = [c for c in cols if c not in data.columns]
+    if missing:
+        raise ValueError(_MISSING_COLS_MSG.format(missing=missing))  # noqa: TRY003
+    if len(data) <= seq_len:
+        raise ValueError(_SHORT_DATA_MSG.format(got=len(data), need=seq_len))  # noqa: TRY003
 
     scalers = {}
     scaled_data = {}
@@ -41,15 +54,15 @@ def prepare_lstm_data(
         y.append(scaled_df[cols].iloc[i].values)
 
     return (
-        pd.array(X),
-        pd.array(y),
+        np.asarray(X),
+        np.asarray(y),
         scalers,
     )
 
 
 def inverse_transform_predictions(
     predictions: pd.DataFrame,
-    scalers: dict,
+    scalers: dict[str, MinMaxScaler],
     columns: list[str] | None = None,
 ) -> pd.DataFrame:
     """Inverse transform scaled predictions back to original scale."""
@@ -66,8 +79,10 @@ def inverse_transform_predictions(
 def create_future_timestamps(
     last_timestamp: pd.Timestamp,
     periods: int,
-    freq: str = "5T",
+    freq: str = "5min",
 ) -> pd.DatetimeIndex:
     """Create future timestamps for predictions."""
+    if periods <= 0:
+        raise ValueError(_PERIODS_MSG.format(periods=periods))  # noqa: TRY003
     start = last_timestamp + pd.Timedelta(minutes=5)
     return pd.date_range(start=start, periods=periods, freq=freq)

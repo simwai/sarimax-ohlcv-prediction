@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Settings:
     """Application settings."""
 
@@ -27,6 +27,10 @@ class Settings:
     # Backtest settings
     backtest_default_exit_bars: int = 5
     backtest_default_lookback: int = 500
+    backtest_init_cash: float = 10000.0
+    backtest_fees: float = 0.001
+    backtest_slippage: float = 0.0005
+    backtest_freq: str = "5min"
 
     # Compare / benchmark settings
     compare_fast_m_range: range = range(7, 10)  # 3 values: 7,8,9 (fast) vs 7 for full
@@ -44,10 +48,10 @@ class Settings:
 
     # Cache settings
     cache_enabled: bool = True
-    cache_ttl_ohlcv_current: int = 3600      # 1 hour
+    cache_ttl_ohlcv_current: int = 3600  # 1 hour
     cache_ttl_ohlcv_historical: int = 86400  # 24 hours
-    cache_ttl_predictions: int = 1800        # 30 min
-    cache_ttl_models: int = 604800           # 7 days
+    cache_ttl_predictions: int = 1800  # 30 min
+    cache_ttl_models: int = 604800  # 7 days
 
 
 SETTINGS = Settings()

@@ -1,11 +1,11 @@
 """Reusable styled components for REPL and CLI."""
 
-import time
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 from rich.box import MINIMAL
-from rich.console import Console, Group
+from rich.columns import Columns
+from rich.console import Group
 from rich.live import Live
 from rich.panel import Panel
 from rich.progress import (
@@ -21,7 +21,7 @@ from rich.progress import (
 from rich.table import Table
 from rich.text import Text
 
-from .theme import ICONS, PALETTE, REPL_THEME, get_console
+from .theme import ICONS, PALETTE, get_console
 
 console = get_console()
 
@@ -34,11 +34,15 @@ DATA_STYLES = {
     "volume": "data.volume",
 }
 
+_TABLE_COLS_MSG = "Predictions table missing columns: {missing}"
+_TABLE_PREVIEW_ROWS = 20
+_WIN_RATE_THRESHOLD = 0.5
+
 
 class DataTable(Table):
     """Compact data table with semantic column colors and zebra striping."""
 
-    def __init__(self, title: str = "", **kwargs: Any) -> None:
+    def __init__(self, title: str = "", **kwargs: Any) -> None:  # pyrefly: ignore -- Rich passthrough kwargs
         super().__init__(
             title=title,
             title_style="panel.title",
@@ -51,7 +55,7 @@ class DataTable(Table):
             **kwargs,
         )
 
-    def add_data_column(self, name: str, **kwargs: Any) -> None:
+    def add_data_column(self, name: str, **kwargs: Any) -> None:  # pyrefly: ignore -- Rich passthrough kwargs
         """Add an OHLCV column with semantic styling."""
         style = DATA_STYLES.get(name.lower(), "ui.text")
         self.add_column(name.capitalize(), style=style, justify="right", **kwargs)
@@ -77,7 +81,7 @@ class StatusPanel(Panel):
         message: str,
         status: str = "info",
         title: str = "",
-        **kwargs: Any,
+        **kwargs: Any,  # pyrefly: ignore -- Rich passthrough kwargs
     ) -> None:
         icon = ICONS.get(status, ICONS["info"])
         style_map = {
@@ -104,22 +108,16 @@ class MetricCard(Panel):
         self,
         label: str,
         value: str,
-        trend: Optional[str] = None,
-        **kwargs: Any,
+        trend: str | None = None,
+        **kwargs: Any,  # pyrefly: ignore -- Rich passthrough kwargs
     ) -> None:
         trend_icon = ""
-        trend_style = ""
         if trend == "up":
             trend_icon = f" [{PALETTE['success']}]{ICONS['chart_up']}[/]"
-            trend_style = PALETTE["success"]
         elif trend == "down":
             trend_icon = f" [{PALETTE['error']}]{ICONS['chart_down']}[/]"
-            trend_style = PALETTE["error"]
 
-        content = (
-            f"[ui.text_dim]{label}[/]\n"
-            f"[ui.text]{value}[/]{trend_icon}"
-        )
+        content = f"[ui.text_dim]{label}[/]\n[ui.text]{value}[/]{trend_icon}"
         super().__init__(
             content,
             border_style="ui.border",
@@ -131,7 +129,7 @@ class MetricCard(Panel):
 class ProgressBar(Progress):
     """Branded progress bar with spinner and elapsed time."""
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(self, **kwargs: Any) -> None:  # pyrefly: ignore -- Rich passthrough kwargs
         super().__init__(
             SpinnerColumn(spinner_name="dots", style="status.running"),
             TextColumn("[progress.description]{task.description}"),
@@ -148,7 +146,7 @@ class ProgressBar(Progress):
 class HelpTable(Table):
     """Aligned help table: cmd | args | description."""
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(self, **kwargs: Any) -> None:  # pyrefly: ignore -- Rich passthrough kwargs
         super().__init__(
             show_header=False,
             box=None,
@@ -161,7 +159,9 @@ class HelpTable(Table):
         self.add_column("args", style="ui.text_dim", no_wrap=False, min_width=32, max_width=45)
         self.add_column("desc", style="ui.text", no_wrap=False)
 
-    def add_section(self, title: str) -> None:
+    def add_section(  # pyrefly: ignore[bad-override] -- intentional wider helper
+        self, title: str
+    ) -> None:
         """Add a section header."""
         self.add_row("", "", "")
         self.add_row(f"[bold ui.text]{ICONS['bullet']} {title.upper()}[/]", "", "")
@@ -203,7 +203,7 @@ class LiveLayout:
             if description:
                 self.progress.update(self.task_ids[name], description=description)
 
-    def update_task(self, name: str, **kwargs: Any) -> None:
+    def update_task(self, name: str, **kwargs: Any) -> None:  # pyrefly: ignore -- Rich passthrough kwargs
         """Update a task."""
         if name in self.task_ids:
             self.progress.update(self.task_ids[name], **kwargs)
@@ -231,27 +231,32 @@ class LiveLayout:
 
 def print_data_summary(data: pd.DataFrame, title: str = "Data Summary") -> None:
     """Print OHLCV data summary using DataTable."""
+    present = [col for col in OHLCV_COLUMNS if col in data.columns]
+    if not present:
+        raise ValueError(_TABLE_COLS_MSG.format(missing=OHLCV_COLUMNS))  # noqa: TRY003
     table = DataTable(title=title)
     table.add_column("Metric", style="brand", no_wrap=True, width=10)
     for col in OHLCV_COLUMNS:
         table.add_data_column(col)
 
-    for col in OHLCV_COLUMNS:
-        if col not in data.columns:
-            continue
-        desc = data[col].describe()
-        table.add_metric_row("Count", [desc["count"]] * 5)
-        table.add_metric_row("Mean", [desc["mean"]] * 5)
-        table.add_metric_row("Std", [desc["std"]] * 5)
-        table.add_metric_row("Min", [desc["min"]] * 5)
-        table.add_metric_row("Max", [desc["max"]] * 5)
-        break
+    summaries = {col: data[col].describe() for col in present}
+    for metric, key in (
+        ("Count", "count"),
+        ("Mean", "mean"),
+        ("Std", "std"),
+        ("Min", "min"),
+        ("Max", "max"),
+    ):
+        values = [
+            summaries[col][key] if col in summaries else float("nan") for col in OHLCV_COLUMNS
+        ]
+        table.add_metric_row(metric, values)
 
     console.print(table)
 
 
 def print_model_comparison(
-    results: dict[str, dict],
+    results: dict[str, dict[str, str]],
     title: str = "Model Comparison",
 ) -> None:
     """Print model comparison table."""
@@ -274,7 +279,9 @@ def print_model_comparison(
 
     for name, info in results.items():
         status = info.get("status", "N/A")
-        status_style = "success" if "Success" in status else "error" if "Failed" in status else "warning"
+        status_style = (
+            "success" if "Success" in status else "error" if "Failed" in status else "warning"
+        )
         table.add_row(
             name,
             f"[{status_style}]{status}[/]",
@@ -294,15 +301,10 @@ def print_predictions_table(
     title: str = "Predictions",
 ) -> None:
     """Print predictions in a table."""
-    table = Table(
-        title=title,
-        title_style="panel.title",
-        box=MINIMAL,
-        padding=(0, 1),
-        collapse_padding=True,
-        header_style="table.header",
-        row_styles=["table.row_even", "table.row_odd"],
-    )
+    missing = [col for col in OHLCV_COLUMNS if col not in predictions.columns]
+    if missing:
+        raise ValueError(_TABLE_COLS_MSG.format(missing=missing))  # noqa: TRY003
+    table = DataTable(title=title)
     table.add_column("Period", style="brand", justify="right", width=6)
     for col in OHLCV_COLUMNS:
         table.add_data_column(col)
@@ -311,7 +313,7 @@ def print_predictions_table(
         for col in OHLCV_COLUMNS:
             table.add_column(f"Actual {col.capitalize()}", style="warning", justify="right")
 
-    for i in range(min(len(predictions), 20)):
+    for i in range(min(len(predictions), _TABLE_PREVIEW_ROWS)):
         row = [str(i + 1)]
         for col in OHLCV_COLUMNS:
             row.append(f"{predictions[col].iloc[i]:.2f}")
@@ -320,10 +322,13 @@ def print_predictions_table(
                 row.append(f"{actuals[col].iloc[i]:.2f}")
         table.add_row(*row)
 
+    if len(predictions) > _TABLE_PREVIEW_ROWS:
+        console.print(f"[ui.text_dim]Showing {_TABLE_PREVIEW_ROWS} of {len(predictions)} rows[/]")
+
     console.print(table)
 
 
-def print_backtest_results(
+def print_backtest_results(  # noqa: PLR0913, PLR0917 -- fixed metric-card signature
     total_return: float,
     sharpe: float,
     max_dd: float,
@@ -332,26 +337,28 @@ def print_backtest_results(
     title: str = "Backtest Results",
 ) -> None:
     """Print backtest results as metric cards."""
-    from rich.columns import Columns
-
     cards = [
         MetricCard("Total Return", f"{total_return:.2%}", "up" if total_return > 0 else "down"),
         MetricCard("Sharpe Ratio", f"{sharpe:.2f}", "up" if sharpe > 1 else "down"),
         MetricCard("Max Drawdown", f"{max_dd:.2%}", "down"),
-        MetricCard("Win Rate", f"{win_rate:.2%}", "up" if win_rate > 0.5 else "down"),
+        MetricCard(
+            "Win Rate", f"{win_rate:.2%}", "up" if win_rate > _WIN_RATE_THRESHOLD else "down"
+        ),
         MetricCard("Total Trades", f"{total_trades:,}"),
     ]
     console.print(Columns(cards, equal=True, expand=True))
 
 
 def status_spinner(message: str) -> Progress:
-    """Create a status spinner context manager."""
-    return Progress(
+    """Create a status spinner showing message."""
+    progress = Progress(
         SpinnerColumn(spinner_name="dots", style="status.running"),
         TextColumn("[progress.description]{task.description}"),
         console=console,
         transient=True,
     )
+    progress.add_task(message, total=None)
+    return progress
 
 
 def print_inline_status(

@@ -3,6 +3,10 @@
 import pandas as pd
 import plotly.graph_objects as go
 
+_MISSING_HIST_MSG = "Historical data missing columns: {missing}"
+_MISSING_PRED_MSG = "Predictions missing columns: {missing}"
+_MISSING_OHLCV_MSG = "OHLCV data missing columns: {missing}"
+
 
 def create_prediction_chart(
     historical_data: pd.DataFrame,
@@ -10,6 +14,18 @@ def create_prediction_chart(
     title: str = "Bitcoin Price Prediction",
 ) -> go.Figure:
     """Create combined historical + prediction chart."""
+    missing_hist = [
+        c
+        for c in ("timestamp", "open", "high", "low", "close", "volume")
+        if c not in historical_data.columns
+    ]
+    if missing_hist:
+        raise ValueError(_MISSING_HIST_MSG.format(missing=missing_hist))  # noqa: TRY003
+    missing_pred = [
+        c for c in ("open", "high", "low", "close", "volume") if c not in predictions.columns
+    ]
+    if missing_pred:
+        raise ValueError(_MISSING_PRED_MSG.format(missing=missing_pred))  # noqa: TRY003
     fig = go.Figure()
 
     # Historical data
@@ -26,7 +42,7 @@ def create_prediction_chart(
 
     # Future timestamps
     start_time = historical_data["timestamp"].iloc[-1] + pd.Timedelta(minutes=5)
-    future_timestamps = pd.date_range(start=start_time, periods=len(predictions), freq="5T")
+    future_timestamps = pd.date_range(start=start_time, periods=len(predictions), freq="5min")
 
     # Predictions
     for column in ["open", "high", "low", "close", "volume"]:
@@ -56,6 +72,9 @@ def create_candlestick_chart(
     title: str = "OHLCV Candlestick Chart",
 ) -> go.Figure:
     """Create candlestick chart from OHLCV data."""
+    missing = [c for c in ("timestamp", "open", "high", "low", "close") if c not in data.columns]
+    if missing:
+        raise ValueError(_MISSING_OHLCV_MSG.format(missing=missing))  # noqa: TRY003
     fig = go.Figure(
         data=[
             go.Candlestick(

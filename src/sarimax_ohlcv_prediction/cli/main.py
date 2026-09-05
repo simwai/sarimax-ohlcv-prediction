@@ -1,7 +1,6 @@
 """Main CLI application with Typer and Rich REPL."""
 
 import logging
-from typing import Literal, cast
 
 import typer
 from rich.table import Table
@@ -10,21 +9,31 @@ from ..backtest import run_backtest
 from ..cache import cache_clear, cache_inspect, cache_stats
 from ..config import SETTINGS
 from ..data.fetcher import fetch_with_retry
-from ..models import MODEL_REGISTRY, get_cached_model
+from ..data.modes import Mode, as_mode
+from ..models import MODEL_REGISTRY, ModelBase, get_cached_model
 from ..viz.components import (
+    DATA_STYLES,
     print_backtest_results,
 )
 from ..viz.rich import print_data_summary, print_predictions_table
 from ..viz.theme import get_console
 
-Mode = Literal["current", "historical"]
-
 
 def _as_mode(mode: str) -> Mode:
     """Validate and cast mode string to Literal."""
-    if mode not in ("current", "historical"):
-        raise typer.BadParameter(f"Mode must be 'current' or 'historical', got: {mode}")  # noqa: TRY003
-    return cast(Mode, mode)
+    try:
+        return as_mode(mode)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+def _model_class(model: str) -> type[ModelBase]:
+    """Look up a model class by name with a clean CLI error."""
+    if model not in MODEL_REGISTRY:
+        raise typer.BadParameter(  # noqa: TRY003
+            f"Model must be one of {', '.join(MODEL_REGISTRY.keys())}, got: {model}"
+        )
+    return MODEL_REGISTRY[model]
 
 
 app = typer.Typer(
@@ -54,7 +63,9 @@ def main(
 @app.command()
 def fetch(
     mode: str = typer.Option("current", help="Mode: current or historical"),
-    lookback: int = typer.Option(SETTINGS.default_lookback_days, help="Lookback days for historical"),
+    lookback: int = typer.Option(
+        SETTINGS.default_lookback_days, help="Lookback days for historical"
+    ),
     output: str | None = typer.Option(None, help="Save to CSV file"),
     no_cache: bool = typer.Option(False, "--no-cache", help="Disable cache for this operation"),
 ) -> None:
@@ -83,6 +94,7 @@ def train(
     no_cache: bool = typer.Option(False, "--no-cache", help="Disable cache for this operation"),
 ) -> None:
     """Train a model on historical data."""
+    _model_class(model)  # fail fast on unknown names before fetching data
     # Fetch data
     with cli_console.status("[status.running]Fetching training data..."):
         data = fetch_with_retry(_as_mode(mode), lookback, use_cache=not no_cache)
@@ -115,10 +127,11 @@ def predict(
     no_cache: bool = typer.Option(False, "--no-cache", help="Disable cache for this operation"),
 ) -> None:
     """Make predictions using a trained model."""
+    _model_class(model)  # fail fast on unknown names before loading data
     # Load or train model
     if model_path:
         with cli_console.status(f"[status.running]Loading {model} from {model_path}..."):
-            model_class = MODEL_REGISTRY[model]
+            model_class = _model_class(model)
             model_instance = model_class.load(model_path)
     else:
         # Train on the fly (with cache)
@@ -159,10 +172,11 @@ def backtest(
     no_cache: bool = typer.Option(False, "--no-cache", help="Disable cache for this operation"),
 ) -> None:
     """Run backtest on historical data."""
+    _model_class(model)  # fail fast on unknown names before loading data
     # Load or train model
     if model_path:
         with cli_console.status(f"[status.running]Loading {model}..."):
-            model_class = MODEL_REGISTRY[model]
+            model_class = _model_class(model)
             model_instance = model_class.load(model_path)
     else:
         with cli_console.status("[status.running]Fetching data and training..."):
@@ -219,8 +233,6 @@ def explore(
     print_data_summary(data, f"Data Exploration ({lookback}d)")
 
     # Correlation matrix using themed table
-    from ..viz.components import DATA_STYLES
-
     corr_table = Table(
         title="Correlation Matrix",
         title_style="panel.title",
@@ -243,18 +255,26 @@ def explore(
 
 @app.command()
 def compare(
-    periods: int = typer.Option(SETTINGS.default_prediction_periods, help="Prediction periods / holdout"),
+    periods: int = typer.Option(
+        SETTINGS.default_prediction_periods, help="Prediction periods / holdout"
+    ),
     mode: str = typer.Option("current", help="Data mode for fetch"),
     lookback: int = typer.Option(SETTINGS.default_lookback_days, help="Lookback days"),
-    fast: bool = typer.Option(True, "--fast/--full", help="Fast preset (m 7-9, iter 10) vs full (7-50, iter 100)"),
-    holdout: int | None = typer.Option(None, help="Holdout for scoring (0=unscored, default=periods)"),
-    timeout: int | None = typer.Option(None, help="Timeout seconds per model (default 90 fast, 300 full)"),
+    fast: bool = typer.Option(
+        True, "--fast/--full", help="Fast preset (m 7-9, iter 10) vs full (7-50, iter 100)"
+    ),
+    holdout: int | None = typer.Option(
+        None, help="Holdout for scoring (0=unscored, default=periods)"
+    ),
+    timeout: int | None = typer.Option(
+        None, help="Timeout seconds per model (default 90 fast, 300 full)"
+    ),
     no_cache: bool = typer.Option(False, "--no-cache", help="Disable cache for this operation"),
 ) -> None:
     """Compare all models with progress, scoring, timeout - non-REPL version."""
     # lazy import to avoid circular
-    from .repl import _run_compare_core
     from ..viz.rich import print_model_comparison
+    from .repl import _run_compare_core
 
     with cli_console.status(f"[status.running]Fetching {mode} data ({lookback}d)..."):
         data = fetch_with_retry(_as_mode(mode), lookback, use_cache=not no_cache)
@@ -266,13 +286,17 @@ def compare(
     print_data_summary(data, f"Fetched Data ({mode}, {lookback}d)")
 
     if timeout is None:
-        timeout = SETTINGS.compare_timeout_seconds if fast else SETTINGS.compare_full_timeout_seconds
+        timeout = (
+            SETTINGS.compare_timeout_seconds if fast else SETTINGS.compare_full_timeout_seconds
+        )
 
     # Determine holdout: if None auto=periods, fast flag already handled
     results = _run_compare_core(data, periods, fast, holdout, timeout)
     holdout_str = holdout if holdout is not None else periods
-    title = f"Model Comparison (periods={periods} holdout={holdout_str} {'fast' if fast else 'full'})"
-    _print_model_comparison(results, title=title)
+    title = (
+        f"Model Comparison (periods={periods} holdout={holdout_str} {'fast' if fast else 'full'})"
+    )
+    print_model_comparison(results, title=title)
 
 
 @app.command()
@@ -285,7 +309,8 @@ def benchmark(
     no_cache: bool = typer.Option(False, "--no-cache", help="Disable cache for this operation"),
 ) -> None:
     """Benchmark all models on held-out tail (alias for compare --full)."""
-    from .repl import _print_model_comparison, _run_compare_core
+    from ..viz.rich import print_model_comparison
+    from .repl import _run_compare_core
 
     with cli_console.status(f"[status.running]Fetching {mode} data ({lookback}d)..."):
         data = fetch_with_retry(_as_mode(mode), lookback, use_cache=not no_cache)
@@ -295,10 +320,12 @@ def benchmark(
         raise typer.Exit(1)
 
     if timeout is None:
-        timeout = SETTINGS.compare_timeout_seconds if fast else SETTINGS.compare_full_timeout_seconds
+        timeout = (
+            SETTINGS.compare_timeout_seconds if fast else SETTINGS.compare_full_timeout_seconds
+        )
 
     results = _run_compare_core(data, holdout, fast, holdout, timeout)
-    _print_model_comparison(results, title=f"Benchmark (holdout={holdout} fast={fast})")
+    print_model_comparison(results, title=f"Benchmark (holdout={holdout} fast={fast})")
 
 
 @app.command()

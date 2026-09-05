@@ -46,6 +46,8 @@ except ImportError:
 _TF_NOT_INSTALLED_TRAIN = "TensorFlow not installed. Cannot train LSTM."
 _TF_NOT_INSTALLED_LOAD = "TensorFlow not installed. Cannot load LSTM."
 _MODEL_NOT_FITTED = "Model not fitted. Call fit() first."
+_BAD_ENVELOPE_MSG = "Unrecognized LSTM model file: {path}"
+_MISSING_KERAS_MSG = "LSTM weights missing at {path}"
 _NEED_DATA_POINTS = "Need at least {seq_len} data points for prediction"
 _PREDICT_NOT_IMPLEMENTED = (
     "LSTM predict requires recent data for iterative forecasting. "
@@ -83,10 +85,14 @@ class LSTMModel(ModelBase):
         learning_rate: float = 0.001,
     ) -> None:
         super().__init__()
-        self.sequence_length = sequence_length or SETTINGS.lstm_sequence_length
-        self.epochs = epochs or SETTINGS.lstm_epochs
-        self.batch_size = batch_size or SETTINGS.lstm_batch_size
-        self.validation_split = validation_split or SETTINGS.lstm_validation_split
+        self.sequence_length = (
+            SETTINGS.lstm_sequence_length if sequence_length is None else sequence_length
+        )
+        self.epochs = SETTINGS.lstm_epochs if epochs is None else epochs
+        self.batch_size = SETTINGS.lstm_batch_size if batch_size is None else batch_size
+        self.validation_split = (
+            SETTINGS.lstm_validation_split if validation_split is None else validation_split
+        )
         self.lstm_units = lstm_units
         self.dropout = dropout
         self.learning_rate = learning_rate
@@ -97,7 +103,8 @@ class LSTMModel(ModelBase):
 
     def _build_model(self, n_features: int) -> Any:
         """Build the Keras LSTM model."""
-        assert TF_AVAILABLE and layers is not None and models is not None and optimizers is not None
+        if not TF_AVAILABLE or layers is None or models is None or optimizers is None:
+            raise RuntimeError(_TF_NOT_INSTALLED_TRAIN)
         inputs = layers.Input(shape=(self.sequence_length, n_features))  # type: ignore[union-attr]
         x = inputs
 
@@ -118,6 +125,8 @@ class LSTMModel(ModelBase):
 
     def _prepare_sequences(self, data: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
         """Create sequences for LSTM training."""
+        if len(data) <= self.sequence_length:
+            raise ValueError(_NEED_DATA_POINTS.format(seq_len=self.sequence_length))
         n_features = len(self.columns)
         X = np.zeros((len(data) - self.sequence_length, self.sequence_length, n_features))
         y = np.zeros((len(data) - self.sequence_length, n_features))
@@ -166,7 +175,8 @@ class LSTMModel(ModelBase):
         # default to silent; allow override via verbose kwarg
         verbose = kwargs.get("verbose", 0)
 
-        assert EarlyStopping is not None and ReduceLROnPlateau is not None
+        if EarlyStopping is None or ReduceLROnPlateau is None:
+            raise RuntimeError(_TF_NOT_INSTALLED_TRAIN)
         early_stop = EarlyStopping(
             monitor="val_loss",
             patience=10,
@@ -257,6 +267,8 @@ class LSTMModel(ModelBase):
 
     def save(self, path: str) -> None:
         """Save model to disk."""
+        if self.keras_model is None:
+            raise RuntimeError(_MODEL_NOT_FITTED)
         Path(path).parent.mkdir(parents=True, exist_ok=True)
 
         # Save Keras model separately
@@ -268,6 +280,7 @@ class LSTMModel(ModelBase):
         # Save metadata and scalers
         joblib.dump(
             {
+                "format": "lstm-v1",
                 "sequence_length": self.sequence_length,
                 "epochs": self.epochs,
                 "batch_size": self.batch_size,
@@ -277,7 +290,6 @@ class LSTMModel(ModelBase):
                 "learning_rate": self.learning_rate,
                 "columns": self.columns,
                 "scalers": self.scalers,
-                "keras_path": str(keras_path),
             },
             path,
         )
@@ -285,24 +297,33 @@ class LSTMModel(ModelBase):
 
     @classmethod
     def load(cls, path: str) -> "LSTMModel":
-        """Load model from disk."""
+        """Load model from disk, rejecting foreign envelopes."""
         if not TF_AVAILABLE:
             raise RuntimeError(_TF_NOT_INSTALLED_LOAD)
 
         data = joblib.load(path)
+        if not isinstance(data, dict) or data.get("format", "lstm-v0") not in (
+            "lstm-v0",
+            "lstm-v1",
+        ):
+            raise ValueError(_BAD_ENVELOPE_MSG.format(path=path))  # noqa: TRY003
         model = cls(
-            sequence_length=data["sequence_length"],
-            epochs=data["epochs"],
-            batch_size=data["batch_size"],
-            validation_split=data["validation_split"],
-            lstm_units=data["lstm_units"],
-            dropout=data["dropout"],
-            learning_rate=data["learning_rate"],
+            sequence_length=data.get("sequence_length", SETTINGS.lstm_sequence_length),
+            epochs=data.get("epochs", SETTINGS.lstm_epochs),
+            batch_size=data.get("batch_size", SETTINGS.lstm_batch_size),
+            validation_split=data.get("validation_split", SETTINGS.lstm_validation_split),
+            lstm_units=data.get("lstm_units", (64, 32)),
+            dropout=data.get("dropout", 0.2),
+            learning_rate=data.get("learning_rate", 0.001),
         )
-        model.columns = data["columns"]
-        model.scalers = data["scalers"]
-        assert tf is not None  # for type checker; guarded by TF_AVAILABLE above
-        model.keras_model = tf.keras.models.load_model(data["keras_path"])  # type: ignore[union-attr]
+        model.columns = data.get("columns", model.columns)
+        model.scalers = data.get("scalers", {})
+        if tf is None:
+            raise RuntimeError(_TF_NOT_INSTALLED_LOAD)
+        keras_path = Path(path).with_suffix("") / "lstm_model.keras"
+        if not keras_path.exists():
+            raise ValueError(_MISSING_KERAS_MSG.format(path=keras_path))  # noqa: TRY003
+        model.keras_model = tf.keras.models.load_model(keras_path)  # type: ignore[union-attr]
         model.is_fitted = True
         logger.info("LSTM model loaded from %s", path)
         return model

@@ -1,17 +1,11 @@
 """Backtesting strategies."""
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from typing import Any
 
 import pandas as pd
 
-
-@dataclass(frozen=True)
-class StrategyConfig:
-    """Configuration for a backtesting strategy."""
-
-    name: str
-    params: dict
+_EXIT_BARS_MSG = "exit_bars must be positive, got {exit_bars}"
 
 
 class BaseStrategy(ABC):
@@ -22,7 +16,7 @@ class BaseStrategy(ABC):
         self,
         data: pd.DataFrame,
         predictions: pd.DataFrame,
-        **params,
+        **params: Any,  # pyrefly: ignore -- open strategy params
     ) -> tuple[pd.Series, pd.Series]:
         """Generate entry and exit signals.
 
@@ -40,7 +34,7 @@ class ExitAfterNBarsStrategy(BaseStrategy):
         data: pd.DataFrame,
         predictions: pd.DataFrame,
         exit_bars: int = 5,
-        **params,
+        **params: Any,  # pyrefly: ignore -- open strategy params
     ) -> tuple[pd.Series, pd.Series]:
         """Generate signals based on predicted price direction.
 
@@ -49,6 +43,8 @@ class ExitAfterNBarsStrategy(BaseStrategy):
             predictions: Predicted OHLCV (same length as data for backtest)
             exit_bars: Number of bars to hold position
         """
+        if exit_bars <= 0:
+            raise ValueError(_EXIT_BARS_MSG.format(exit_bars=exit_bars))
         # Entry: long if predicted close > current close
         predicted_direction = predictions["close"] > data["close"]
         entries = predicted_direction
@@ -66,16 +62,16 @@ class ExitOnSignalStrategy(BaseStrategy):
         self,
         data: pd.DataFrame,
         predictions: pd.DataFrame,
-        **params,
+        **params: Any,  # pyrefly: ignore -- open strategy params
     ) -> tuple[pd.Series, pd.Series]:
         """Enter on direction, exit when direction reverses."""
         predicted_direction = predictions["close"] > data["close"]
 
         # Enter long when prediction says up
-        entries = predicted_direction & ~predicted_direction.shift(1).fillna(False)
+        entries = predicted_direction & ~(predicted_direction.shift(1).fillna(False))
 
         # Exit when prediction says down (for long positions)
-        exits = (~predicted_direction) & predicted_direction.shift(1).fillna(False)
+        exits = (~predicted_direction) & (predicted_direction.shift(1).fillna(False))
 
         return entries, exits
 

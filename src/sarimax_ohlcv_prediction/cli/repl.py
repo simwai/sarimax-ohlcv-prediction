@@ -3,7 +3,8 @@
 import contextlib
 import logging
 import time
-from typing import Literal, cast
+from collections.abc import Callable
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -11,14 +12,7 @@ from rich.console import Group
 from rich.live import Live
 from rich.panel import Panel
 from rich.progress import (
-    BarColumn,
-    MofNCompleteColumn,
-    Progress,
-    SpinnerColumn,
     TaskID,
-    TaskProgressColumn,
-    TextColumn,
-    TimeElapsedColumn,
 )
 from rich.prompt import Prompt
 from rich.table import Table
@@ -28,31 +22,27 @@ from ..backtest import print_backtest_result, run_backtest
 from ..backtest.strategies import STRATEGY_REGISTRY
 from ..config import SETTINGS
 from ..data.fetcher import fetch_with_retry
-from ..models import MODEL_REGISTRY, create_model
-from ..viz.rich import console
+from ..data.modes import Mode, as_mode
+from ..models import MODEL_REGISTRY, create_model, get_cached_model
 from ..viz.components import (
-    DataTable,
+    DATA_STYLES,
     HelpTable,
-    LiveLayout,
-    MetricCard,
     ProgressBar,
-    print_backtest_results,
     print_data_summary,
     print_inline_status,
     print_model_comparison,
     print_predictions_table,
     print_verbose_status,
-    status_spinner,
 )
-
-Mode = Literal["current", "historical"]
+from ..viz.rich import console
 
 
 def _as_mode(mode: str) -> Mode:
-    if mode not in ("current", "historical"):
+    try:
+        return as_mode(mode)
+    except ValueError:
         console.print(f"[warning]Invalid mode: {mode}, using current[/warning]")
         return cast(Mode, "current")
-    return cast(Mode, mode)
 
 
 # Global state for REPL
@@ -69,6 +59,15 @@ _MIN_ARGS_BACKTEST_LOOKBACK = 3
 _MIN_HOLDOUT = 2
 
 
+def _parse_int(value: str, label: str) -> int | None:
+    """Parse an int arg with a clean REPL error."""
+    try:
+        return int(value)
+    except ValueError:
+        console.print(f"[error]Invalid {label}: {value}[/error]")
+        return None
+
+
 def _build_help_table() -> HelpTable:
     """Build aligned help table: cmd | args | description (fixed columns)."""
     table = HelpTable()
@@ -80,14 +79,24 @@ def _build_help_table() -> HelpTable:
 
     table.add_section("Models")
     table.add_command("train", "<model> [iters]", "Train a model (SARIMAX/Prophet/LSTM)")
-    table.add_command("load", "<model> [path]", "Load model from file (default: models/<model>_model.joblib)")
+    table.add_command(
+        "load", "<model> [path]", "Load model from file (default: models/<model>_model.joblib)"
+    )
     table.add_command("save", "[path]", "Save current model")
     table.add_command("models", "", "List available models")
 
     table.add_section("Prediction")
     table.add_command("predict", "[periods]", "Make predictions")
-    table.add_command("compare", "[periods] [--fast|--full] [--holdout N] [--timeout S]", "Compare all models (fast by default, scored on holdout)")
-    table.add_command("benchmark", "[holdout]", "Train all models, score on held-out tail (alias for compare --full)")
+    table.add_command(
+        "compare",
+        "[periods] [--fast|--full] [--holdout N] [--timeout S]",
+        "Compare all models (fast by default, scored on holdout)",
+    )
+    table.add_command(
+        "benchmark",
+        "[holdout]",
+        "Train all models, score on held-out tail (alias for compare --full)",
+    )
 
     table.add_section("Backtesting")
     table.add_command("backtest", "[strategy] [params]", "Run backtest")
@@ -127,7 +136,12 @@ def print_status(args: list[str]) -> None:
 def cmd_fetch(args: list[str]) -> None:
     """Fetch data command."""
     mode = args[0] if args else "current"
-    lookback = int(args[1]) if len(args) > 1 else SETTINGS.default_lookback_days
+    lookback = SETTINGS.default_lookback_days
+    if len(args) > 1:
+        parsed = _parse_int(args[1], "lookback")
+        if parsed is None:
+            return
+        lookback = parsed
 
     with console.status(f"[status.running]Fetching {mode} data ({lookback}d)..."):
         data = fetch_with_retry(_as_mode(mode), lookback)
@@ -160,7 +174,6 @@ def cmd_explore(args: list[str]) -> None:
     )
     corr_table.add_column("", style="brand", no_wrap=True)
     for col in ["open", "high", "low", "close", "volume"]:
-        from ..viz.components import DATA_STYLES
         corr_table.add_column(col, style=DATA_STYLES.get(col, "ui.text"), justify="right")
 
     corr = _state["data"][["open", "high", "low", "close", "volume"]].corr()  # type: ignore[union-attr]
@@ -195,16 +208,20 @@ def cmd_train(args: list[str]) -> None:
         )
         return
 
-    iterations = int(args[1]) if len(args) > 1 else SETTINGS.default_iterations
+    iterations = SETTINGS.default_iterations
+    if len(args) > 1:
+        parsed = _parse_int(args[1], "iterations")
+        if parsed is None:
+            return
+        iterations = parsed
 
     with console.status(f"[status.running]Training {model_name}..."):
-        model_instance = create_model(model_name)
-        model_instance.fit(_state["data"], iterations=iterations)
+        model_instance = get_cached_model(model_name, _state["data"], iterations=iterations)
 
     _state["model"] = model_instance
     _state["model_name"] = model_name
 
-    default_path = f"models/{model_name.lower()}_model.joblib"
+    default_path = str(SETTINGS.models_dir / f"{model_name.lower()}_model.joblib")
     model_instance.save(default_path)
     _state["model_path"] = default_path
     console.print(f"[success]{model_name} trained and saved to {default_path}[/success]")
@@ -244,7 +261,10 @@ def cmd_save(args: list[str]) -> None:
         return
 
     model_name = _state["model_name"]
-    default_path = f"models/{model_name.lower()}_model.joblib" if isinstance(model_name, str) else "models/model.joblib"
+    if isinstance(model_name, str):
+        default_path = str(SETTINGS.models_dir / f"{model_name.lower()}_model.joblib")
+    else:
+        default_path = str(SETTINGS.models_dir / "model.joblib")
     path = args[0] if args else default_path
 
     try:
@@ -288,7 +308,12 @@ def cmd_predict(args: list[str]) -> None:
         console.print("[warning]No model loaded. Use 'train' or 'load' first.[/warning]")
         return
 
-    periods = int(args[0]) if args else SETTINGS.default_prediction_periods
+    periods = SETTINGS.default_prediction_periods
+    if args:
+        parsed = _parse_int(args[0], "periods")
+        if parsed is None:
+            return
+        periods = parsed
 
     try:
         with console.status("[status.running]Generating predictions..."):
@@ -317,11 +342,6 @@ def _compute_metrics(actual: np.ndarray, predicted: np.ndarray) -> dict[str, flo
     nonzero = np.where(actual != 0, actual, np.nan)
     mape = float(np.nanmean(np.abs(err / nonzero)) * 100)
     return {"rmse": rmse, "mae": mae, "mape": mape}
-
-
-def _make_progress(description: str) -> ProgressBar:
-    """Create a rich Progress with spinner+bar for model training."""
-    return ProgressBar()
 
 
 def _silence_model_loggers() -> dict[str, int]:
@@ -367,7 +387,9 @@ def _parse_holdout_flag(args: list[str], idx: int, holdout: int | None) -> tuple
         return holdout, idx
 
 
-def _parse_timeout_flag(args: list[str], idx: int, timeout: int | None) -> tuple[int | None, int, bool]:
+def _parse_timeout_flag(
+    args: list[str], idx: int, timeout: int | None
+) -> tuple[int | None, int, bool]:
     """Parse --timeout <n> or --timeout=<n>. Returns (new_timeout, new_idx, explicit_set)."""
     a = args[idx]
     if a == "--timeout":
@@ -415,20 +437,22 @@ def _parse_compare_args(args: list[str]) -> tuple[int, bool, int | None, int | N
             remaining.append(a)
         i += 1
     if remaining:
-        with contextlib.suppress(ValueError):
+        try:
             periods = int(remaining[0])
-        if periods != SETTINGS.default_prediction_periods:
+        except ValueError:
             console.print(f"[error]Invalid periods: {remaining[0]}[/error]")
         if len(remaining) > 1 and holdout is None:
             with contextlib.suppress(ValueError):
                 holdout = int(remaining[1])
     if not timeout_explicit:
-        timeout = SETTINGS.compare_timeout_seconds if fast else SETTINGS.compare_full_timeout_seconds
+        timeout = (
+            SETTINGS.compare_timeout_seconds if fast else SETTINGS.compare_full_timeout_seconds
+        )
     return periods, fast, holdout, timeout
 
 
 def _resolve_compare_params(
-    data,
+    data: pd.DataFrame,
     periods: int,
     fast: bool,
     holdout: int | None,
@@ -437,7 +461,9 @@ def _resolve_compare_params(
     if holdout is None:
         holdout = periods if len(data) > periods + 10 else 0
     if holdout is not None and holdout != 0 and len(data) <= holdout:
-        console.print(f"[warning]Not enough data for holdout={holdout}, disabling scoring[/warning]")
+        console.print(
+            f"[warning]Not enough data for holdout={holdout}, disabling scoring[/warning]"
+        )
         holdout = 0
     if holdout is not None and holdout != 0 and holdout < _MIN_HOLDOUT:
         console.print("[error]Holdout must be >=2, disabling scoring[/error]")
@@ -475,29 +501,41 @@ def _resolve_mode_params(fast: bool) -> tuple[range, int, int]:
 
 def _make_progress_callback(
     progress: ProgressBar, model_name: str, task_id: TaskID, total: int
-):
+) -> Callable[[str, int, int], None]:
     """Build a progress callback bound to (progress, model_name, task_id, total)."""
+
     def _cb(col_or_epoch: str, val: int, done: int) -> None:
         try:
             if model_name == "SARIMAX":
-                progress.update(task_id, completed=done, description=f"[brand]{model_name} {col_or_epoch} m={val}[/]")
+                progress.update(
+                    task_id,
+                    completed=done,
+                    description=f"[brand]{model_name} {col_or_epoch} m={val}[/]",
+                )
             elif model_name == "Prophet":
-                progress.update(task_id, completed=done, description=f"[brand]{model_name} {col_or_epoch}[/]")
+                progress.update(
+                    task_id, completed=done, description=f"[brand]{model_name} {col_or_epoch}[/]"
+                )
             elif model_name == "LSTM":
-                progress.update(task_id, completed=val, description=f"[brand]{model_name} epoch {val}/{total}[/]")
+                progress.update(
+                    task_id,
+                    completed=val,
+                    description=f"[brand]{model_name} epoch {val}/{total}[/]",
+                )
         except Exception:
             pass
+
     return _cb
 
 
 def _build_fit_kwargs(
     name: str,
-    cb,
+    cb: Callable[[str, int, int], None] | None,
     timeout: int | None,
     sarimax_m_range: range,
     sarimax_iterations: int,
     lstm_epochs: int,
-) -> dict:
+) -> dict[str, Any]:  # pyrefly: ignore -- heterogeneous fit kwargs
     """Assemble kwargs for model.fit()."""
     fit_kwargs: dict = {"progress_callback": cb}
     if timeout is not None and timeout > 0:
@@ -511,7 +549,10 @@ def _build_fit_kwargs(
     return fit_kwargs
 
 
-def _format_model_info(model_instance, name: str) -> str:
+def _format_model_info(
+    model_instance: Any,  # pyrefly: ignore -- heterogeneous model types
+    name: str,
+) -> str:
     """Format compact info string for table."""
     try:
         if name == "SARIMAX" and hasattr(model_instance, "best_m_values"):
@@ -529,13 +570,13 @@ def _format_model_info(model_instance, name: str) -> str:
 
 
 def _score_predictions(
-    model_instance,
+    model_instance: Any,  # pyrefly: ignore -- heterogeneous model types
     name: str,
-    predictions,
+    predictions: pd.DataFrame,
     actual_close: np.ndarray | None,
     elapsed_str: str,
     pending_logs: list[tuple[str, str]],
-) -> dict:
+) -> dict[str, str]:
     """Score predictions against actual_close. Returns row dict for results table."""
     predicted_close = predictions["close"].to_numpy(dtype=float)
     if actual_close is None or len(predicted_close) == 0:
@@ -572,7 +613,9 @@ def _score_predictions(
     metrics = _compute_metrics(actual_close_trim, predicted_close)
     info = _format_model_info(model_instance, name)
     if any(np.isnan(v) for v in metrics.values()):
-        pending_logs.append(("warning", f"{name}: Partial - no valid close prediction ({elapsed_str})"))
+        pending_logs.append(
+            ("warning", f"{name}: Partial - no valid close prediction ({elapsed_str})")
+        )
         return {
             "status": "Partial",
             "rmse": "N/A",
@@ -597,7 +640,9 @@ def _score_predictions(
     }
 
 
-def _handle_interrupt(name: str, start: float, pending_logs: list[tuple[str, str]]) -> dict:
+def _handle_interrupt(
+    name: str, start: float, pending_logs: list[tuple[str, str]]
+) -> dict[str, str]:
     """Build interrupted-row dict for results."""
     elapsed = time.time() - start
     pending_logs.append(("warning", f"{name}: Interrupted ({elapsed:.1f}s)"))
@@ -611,7 +656,9 @@ def _handle_interrupt(name: str, start: float, pending_logs: list[tuple[str, str
     }
 
 
-def _handle_failure(name: str, start: float, exc: Exception, pending_logs: list[tuple[str, str]]) -> dict:
+def _handle_failure(
+    name: str, start: float, exc: Exception, pending_logs: list[tuple[str, str]]
+) -> dict[str, str]:
     """Build failed-row dict for results."""
     elapsed = time.time() - start
     pending_logs.append(("error", f"{name}: Failed - {exc} ({elapsed:.1f}s)"))
@@ -642,14 +689,16 @@ def _train_and_predict_one(
     sarimax_m_range: range,
     sarimax_iterations: int,
     lstm_epochs: int,
-) -> tuple[str, dict, float]:
+) -> tuple[str, dict[str, str], float]:
     """Train and predict one model. Returns (name, result_row, elapsed_seconds)."""
     start = time.time()
     total = int(progress.tasks[task_ids[name]].total or 1)
     if scored:
         status_text.plain = f"train {len(train_df)} · holdout {holdout} · {mode_label} · {timeout}s | {name} training..."
     else:
-        status_text.plain = f"train {len(train_df)} · predict {periods} · {mode_label} | {name} training..."
+        status_text.plain = (
+            f"train {len(train_df)} · predict {periods} · {mode_label} | {name} training..."
+        )
     progress.start_task(task_ids[name])
     progress.update(task_ids[name], description=f"[brand]{name} training...[/]")
 
@@ -663,7 +712,9 @@ def _train_and_predict_one(
             model_instance.fit(train_df, **fit_kwargs)
         except KeyboardInterrupt:
             pending_logs.append(("warning", f"{name}: interrupted by user, keeping best so far"))
-        progress.update(task_ids[name], completed=total, description=f"[success]{name} training done[/]")
+        progress.update(
+            task_ids[name], completed=total, description=f"[success]{name} training done[/]"
+        )
 
         status_text.plain = (
             f"train {len(train_df)} · holdout {holdout} · {mode_label} | {name} predicting..."
@@ -676,9 +727,13 @@ def _train_and_predict_one(
         elapsed = time.time() - start
         elapsed_str = f"{elapsed:.1f}s"
         if scored:
-            row = _score_predictions(model_instance, name, predictions, actual_close, elapsed_str, pending_logs)
+            row = _score_predictions(
+                model_instance, name, predictions, actual_close, elapsed_str, pending_logs
+            )
         else:
-            row = _score_predictions(model_instance, name, predictions, None, elapsed_str, pending_logs)
+            row = _score_predictions(
+                model_instance, name, predictions, None, elapsed_str, pending_logs
+            )
         return name, row, elapsed
     except Exception as exc:
         progress.stop_task(task_ids[name])
@@ -686,7 +741,7 @@ def _train_and_predict_one(
 
 
 def _run_compare_core(
-    data,
+    data: pd.DataFrame,
     periods: int,
     fast: bool,
     holdout: int | None,
@@ -700,9 +755,13 @@ def _run_compare_core(
 
     mode_label = "fast" if fast else "full"
     if scored:
-        header_plain = f"train {len(train_df)} · holdout {holdout} · {mode_label} · {timeout}s timeout"
+        header_plain = (
+            f"train {len(train_df)} · holdout {holdout} · {mode_label} · {timeout}s timeout"
+        )
     else:
-        header_plain = f"train {len(train_df)} · predict {periods} · {mode_label} · {timeout}s timeout"
+        header_plain = (
+            f"train {len(train_df)} · predict {periods} · {mode_label} · {timeout}s timeout"
+        )
     status_text = Text(header_plain, style="ui.text_dim")
 
     progress = ProgressBar()
@@ -770,12 +829,19 @@ def cmd_benchmark(args: list[str]) -> None:
         results = _run_compare_core(_state["data"], periods, fast, holdout, timeout)
         title = f"Benchmark (holdout={holdout} fast={fast})"
     else:
-        holdout = int(args[0]) if args else SETTINGS.default_prediction_periods
+        holdout = SETTINGS.default_prediction_periods
+        if args:
+            parsed = _parse_int(args[0], "holdout")
+            if parsed is None:
+                return
+            holdout = parsed
         if holdout < _MIN_HOLDOUT:
             console.print("[error]Holdout must be >= 2 periods.[/error]")
             return
         if len(_state["data"]) <= holdout:
-            console.print(f"[error]Need more than {holdout} rows; have {len(_state['data'])}.[/error]")
+            console.print(
+                f"[error]Need more than {holdout} rows; have {len(_state['data'])}.[/error]"
+            )
             return
         results = _run_compare_core(
             _state["data"], holdout, False, holdout, SETTINGS.compare_full_timeout_seconds
@@ -794,9 +860,13 @@ def cmd_compare(args: list[str]) -> None:
     periods, fast, holdout, timeout = _parse_compare_args(args)
     results = _run_compare_core(_state["data"], periods, fast, holdout, timeout)
     holdout_str = holdout if holdout is not None else periods
-    title = f"Model Comparison (periods={periods} holdout={holdout_str} {'fast' if fast else 'full'})"
+    title = (
+        f"Model Comparison (periods={periods} holdout={holdout_str} {'fast' if fast else 'full'})"
+    )
     print_model_comparison(results, title=title)
-    console.print("[ui.text_dim]Tip: compare --full --holdout 24 --timeout 300 for full sweep; compare --holdout 0 for unscored[/]")
+    console.print(
+        "[ui.text_dim]Tip: compare --full --holdout 24 --timeout 300 for full sweep; compare --holdout 0 for unscored[/]"
+    )
 
 
 def cmd_backtest(args: list[str]) -> None:
@@ -810,8 +880,18 @@ def cmd_backtest(args: list[str]) -> None:
         return
 
     strategy = args[0] if args else "exit_after_n"
-    exit_bars = int(args[1]) if len(args) > 1 else SETTINGS.backtest_default_exit_bars
-    lookback = int(args[2]) if len(args) > _MIN_ARGS_BACKTEST_LOOKBACK - 1 else SETTINGS.backtest_default_lookback
+    exit_bars = SETTINGS.backtest_default_exit_bars
+    if len(args) > 1:
+        parsed = _parse_int(args[1], "exit bars")
+        if parsed is None:
+            return
+        exit_bars = parsed
+    lookback = SETTINGS.backtest_default_lookback
+    if len(args) > _MIN_ARGS_BACKTEST_LOOKBACK - 1:
+        parsed = _parse_int(args[2], "lookback")
+        if parsed is None:
+            return
+        lookback = parsed
 
     test_data = _state["data"].iloc[-lookback:]
 
@@ -885,8 +965,8 @@ def run_repl() -> None:
     console.print()
     console.print(
         Panel(
-            f"[brand]SARIMAX OHLCV Prediction REPL[/]\n"
-            f"[ui.text_dim]Type 'help' for commands, 'exit' to quit[/]",
+            "[brand]SARIMAX OHLCV Prediction REPL[/]\n"
+            "[ui.text_dim]Type 'help' for commands, 'exit' to quit[/]",
             border_style="brand",
             padding=(0, 1),
         )

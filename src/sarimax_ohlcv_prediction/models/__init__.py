@@ -1,6 +1,7 @@
 """Models package - exports all model implementations."""
 
 import logging
+from typing import Any
 
 import pandas as pd
 
@@ -36,27 +37,20 @@ MODEL_REGISTRY = {
 _UNKNOWN_MODEL_MSG = "Unknown model: {name}. Available: {available}"
 
 
-def get_model_class(name: str) -> type:
+def get_model_class(name: str) -> type[ModelBase]:
     """Get model class by name."""
     if name not in MODEL_REGISTRY:
-        raise ValueError(_UNKNOWN_MODEL_MSG.format(name=name, available=list(MODEL_REGISTRY.keys())))
+        raise ValueError(
+            _UNKNOWN_MODEL_MSG.format(name=name, available=list(MODEL_REGISTRY.keys()))
+        )
     return MODEL_REGISTRY[name]
 
 
-def create_model(
-    name: str,
-    lookback: int | None = None,
-    iterations: int | None = None,
-    use_cache: bool = True,
-    **kwargs,
-) -> BaseModel:
+def create_model(name: str, **kwargs: Any) -> BaseModel:  # pyrefly: ignore -- open model params
     """Create model instance by name.
 
     Args:
         name: Model name (SARIMAX, Prophet, LSTM)
-        lookback: Training data lookback days (for cache key)
-        iterations: Training iterations/epochs (for cache key)
-        use_cache: Whether to use model cache
         **kwargs: Additional model arguments
 
     Returns:
@@ -67,11 +61,11 @@ def create_model(
 
 def _get_or_train_model(
     name: str,
-    data: "pd.DataFrame",
+    data: pd.DataFrame,
     lookback: int,
     iterations: int,
     use_cache: bool = True,
-    **kwargs,
+    **kwargs: Any,  # pyrefly: ignore -- open model params
 ) -> BaseModel:
     """Get cached model or train new one.
 
@@ -113,11 +107,11 @@ def _get_or_train_model(
 
 def get_cached_model(
     name: str,
-    data: "pd.DataFrame",
+    data: pd.DataFrame,
     lookback: int | None = None,
     iterations: int | None = None,
     use_cache: bool = True,
-    **kwargs,
+    **kwargs: Any,  # pyrefly: ignore -- open model params
 ) -> BaseModel:
     """Get model from cache or train new one.
 

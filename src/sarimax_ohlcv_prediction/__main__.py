@@ -1,4 +1,4 @@
-"""Package entry point - runs the Streamlit app by default."""
+"""Package entry point - runs the Typer CLI app."""
 
 from .cli.main import app
 

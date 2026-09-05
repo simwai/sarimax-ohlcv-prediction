@@ -34,7 +34,7 @@ def fetch_data(
     Returns:
         DataFrame with columns: timestamp, open, high, low, close, volume
     """
-    lookback = lookback_days or SETTINGS.default_lookback_days
+    lookback = SETTINGS.default_lookback_days if lookback_days is None else lookback_days
 
     try:
         if mode == "current":
@@ -47,9 +47,7 @@ def fetch_data(
             _raise_invalid_mode(mode)
             ohlcv = []  # unreachable; satisfies type checker for unbound name
 
-        data = pd.DataFrame(
-            ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"]
-        )
+        data = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
         data["timestamp"] = pd.to_datetime(data["timestamp"], unit="ms")
         return data
     except Exception:
@@ -90,10 +88,27 @@ def fetch_with_retry(
     Returns:
         DataFrame with OHLCV data
     """
-    lookback = lookback_days or SETTINGS.default_lookback_days
+    if use_cache:
+        return fetch_cached(mode, lookback_days, max_retries)
+    return _fetch_with_retry_uncached(mode, lookback_days, max_retries)
 
-    if not use_cache:
-        return _fetch_with_retry_uncached(mode, lookback_days, max_retries)
+
+def fetch_cached(
+    mode: Literal["current", "historical"],
+    lookback_days: int | None = None,
+    max_retries: int = 3,
+) -> pd.DataFrame:
+    """Fetch data with retry logic using the persistent cache.
+
+    Args:
+        mode: "current" for last 24h, "historical" for lookback_days
+        lookback_days: Number of days to look back (for historical mode)
+        max_retries: Maximum retry attempts
+
+    Returns:
+        DataFrame with OHLCV data
+    """
+    lookback = SETTINGS.default_lookback_days if lookback_days is None else lookback_days
 
     # Check cache first
     cache_key = get_ohlcv_key_from_params(mode, lookback)

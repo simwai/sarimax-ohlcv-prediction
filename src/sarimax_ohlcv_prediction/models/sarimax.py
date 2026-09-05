@@ -18,6 +18,9 @@ from .base import ModelBase
 logger = logging.getLogger(__name__)
 
 _MODEL_NOT_FITTED = "Model not fitted. Call fit() first."
+_NO_VALID_MODEL = "No valid SARIMAX model found for any column."
+_BAD_ENVELOPE_MSG = "Unrecognized SARIMAX model file: {path}"
+_REQUIRED_KEYS = ("models", "best_m_values", "columns")
 
 _SMALL_M_MAX_PQ = 2
 _MEDIUM_M_MAX_PQ = 3
@@ -39,11 +42,7 @@ def _resolve_max_pq(m_range: range) -> int:
 
 def _is_timed_out(start_time: float | None, timeout: float | None) -> bool:
     """Return True if a timeout was configured and has elapsed."""
-    return (
-        timeout is not None
-        and start_time is not None
-        and time.time() - start_time > timeout
-    )
+    return timeout is not None and start_time is not None and time.time() - start_time > timeout
 
 
 @dataclass
@@ -198,6 +197,8 @@ class SARIMAXModel(ModelBase):
                 logger.warning("SARIMAX fit overall timeout, stopping after %s", column)
                 break
 
+        if not self.models:
+            raise RuntimeError(_NO_VALID_MODEL)
         self.is_fitted = True
         return self
 
@@ -221,6 +222,7 @@ class SARIMAXModel(ModelBase):
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(
             {
+                "format": "sarimax-v1",
                 "models": self.models,
                 "best_m_values": self.best_m_values,
                 "columns": self.columns,
@@ -234,8 +236,15 @@ class SARIMAXModel(ModelBase):
 
     @classmethod
     def load(cls, path: str) -> "SARIMAXModel":
-        """Load model from disk."""
+        """Load model from disk, rejecting foreign envelopes."""
         data = joblib.load(path)
+        if not isinstance(data, dict) or data.get("format", "sarimax-v0") not in (
+            "sarimax-v0",
+            "sarimax-v1",
+        ):
+            raise ValueError(_BAD_ENVELOPE_MSG.format(path=path))  # noqa: TRY003
+        if any(key not in data for key in _REQUIRED_KEYS):
+            raise ValueError(_BAD_ENVELOPE_MSG.format(path=path))  # noqa: TRY003
         model = cls(
             seasonal=data.get("seasonal", True),
             m_range=data.get("m_range", range(7, 50)),

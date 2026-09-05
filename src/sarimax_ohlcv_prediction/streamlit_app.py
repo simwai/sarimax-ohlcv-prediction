@@ -1,27 +1,24 @@
 """Streamlit GUI application."""
 
+import contextlib
+import csv
 import logging
+import os
+import tempfile
 import time
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any
 
 import pandas as pd
 import streamlit as st
 
 from .config import SETTINGS
 from .data.fetcher import fetch_with_retry
+from .data.modes import as_mode as _as_mode
 from .data.processor import create_future_timestamps
 from .models import MODEL_REGISTRY, create_model
 from .viz.plotly import create_prediction_chart
-
-Mode = Literal["current", "historical"]
-
-
-def _as_mode(mode: str) -> Mode:
-    if mode not in ("current", "historical"):
-        return cast(Mode, "current")
-    return cast(Mode, mode)
 
 # Initialize session state
 if "calculation_lock" not in st.session_state:
@@ -30,6 +27,19 @@ if "calculation_lock" not in st.session_state:
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+_CSV_COLS_MSG = "Predictions missing columns: {missing}"
+
+
+def _to_int(value: object, default: int) -> int:
+    """Coerce a Streamlit widget value to int with a fallback."""
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    return default
 
 
 class PredictionConfig:
@@ -42,7 +52,7 @@ class PredictionConfig:
         lookback: int,
         iterations: int,
         prediction_periods: int,
-        plot_placeholder: Any,
+        plot_placeholder: Any,  # pyrefly: ignore -- Streamlit placeholder duck type
     ) -> None:
         self.model_name = model_name
         self.mode = mode
@@ -52,32 +62,55 @@ class PredictionConfig:
         self.plot_placeholder = plot_placeholder
 
 
-def write_to_csv(predicted_prices: pd.DataFrame, filename: str = SETTINGS.csv_filename) -> None:
-    """Write predictions to CSV with archiving."""
-    path = Path(filename)
+def write_to_csv(
+    predicted_prices: pd.DataFrame,
+    filename: str = SETTINGS.csv_filename,
+    last_timestamp: pd.Timestamp | None = None,
+) -> None:
+    """Write predictions to CSV atomically, preserving prior rows."""
+    missing = [
+        c for c in ("open", "high", "low", "close", "volume") if c not in predicted_prices.columns
+    ]
+    if missing:
+        raise ValueError(_CSV_COLS_MSG.format(missing=missing))  # noqa: TRY003
+    anchor = last_timestamp if last_timestamp is not None else pd.Timestamp.now()
+    timestamps = create_future_timestamps(anchor, len(predicted_prices))
+    target = Path(filename)
 
-    if path.exists() and path.stat().st_size > SETTINGS.csv_max_size_mb * 1024 * 1024:
-        archive_name = f"{filename}.archive_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
-        path.rename(archive_name)
-        logger.info("Archived large CSV to %s", archive_name)
+    if target.exists() and target.stat().st_size > SETTINGS.csv_max_size_mb * 1024 * 1024:
+        archive = target.with_name(
+            f"{target.name}.archive_{datetime.now(timezone.utc):%Y%m%d%H%M%S}"
+        )
+        target.rename(archive)
+        logger.info("Archived large CSV to %s", archive)
 
-    mode = "a" if path.exists() else "w"
-    with path.open(mode, newline="") as f:
-        if mode == "w":
-            f.write("timestamp,open,high,low,close,volume\n")
-
-        timestamps = create_future_timestamps(pd.Timestamp.now(), len(predicted_prices))
-
-        for i in range(len(predicted_prices)):
-            row = [
-                timestamps[i].strftime("%Y-%m-%d %H:%M:%S"),
-                predicted_prices["open"].iloc[i],
-                predicted_prices["high"].iloc[i],
-                predicted_prices["low"].iloc[i],
-                predicted_prices["close"].iloc[i],
-                predicted_prices["volume"].iloc[i],
-            ]
-            f.write(",".join(str(x) for x in row) + "\n")
+    previous: str | None = target.read_text(encoding="utf-8") if target.exists() else None
+    fd, tmp_name = tempfile.mkstemp(dir=str(target.parent), prefix=f"{target.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            if previous:
+                f.write(previous)
+                if not previous.endswith("\n"):
+                    f.write("\n")
+            else:
+                writer.writerow(["timestamp", "open", "high", "low", "close", "volume"])
+            for stamp, (_, row) in zip(timestamps, predicted_prices.iterrows(), strict=True):
+                writer.writerow(
+                    [
+                        stamp.strftime("%Y-%m-%d %H:%M:%S"),
+                        row["open"],
+                        row["high"],
+                        row["low"],
+                        row["close"],
+                        row["volume"],
+                    ]
+                )
+        Path(tmp_name).replace(target)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            Path(tmp_name).unlink()
+        raise
 
 
 def run_prediction_cycle(config: PredictionConfig) -> None:
@@ -108,7 +141,7 @@ def run_prediction_cycle(config: PredictionConfig) -> None:
                 predictions = model.predict(config.prediction_periods)
 
         # Save to CSV
-        write_to_csv(predictions)
+        write_to_csv(predictions, last_timestamp=data["timestamp"].iloc[-1])
 
         # Plot
         fig = create_prediction_chart(
@@ -127,18 +160,8 @@ def run_prediction_cycle(config: PredictionConfig) -> None:
         st.session_state.calculation_lock = False
 
 
-def main() -> None:
-    """Main Streamlit app."""
-    st.set_page_config(
-        page_title="Bitcoin Price Prediction",
-        page_icon="📈",
-        layout="wide",
-    )
-
-    st.title("📈 Bitcoin Price Prediction")
-    st.markdown("Real-time OHLCV forecasting with SARIMAX, Prophet, and LSTM")
-
-    # Sidebar controls
+def _sidebar_settings() -> tuple[str, str, int, int, int, bool, bool]:
+    """Render sidebar controls and return coerced settings."""
     with st.sidebar:
         st.header("Settings")
 
@@ -188,6 +211,40 @@ def main() -> None:
 
         run_once = st.button("Run Once", type="primary")
 
+    model_name: str = model_choice if isinstance(model_choice, str) else "SARIMAX"
+    mode_name: str = mode if isinstance(mode, str) else "current"
+    return (
+        model_name,
+        mode_name,
+        _to_int(lookback, SETTINGS.default_lookback_days),
+        _to_int(iterations, SETTINGS.default_iterations),
+        _to_int(prediction_periods, SETTINGS.default_prediction_periods),
+        bool(auto_refresh),
+        bool(run_once),
+    )
+
+
+def main() -> None:
+    """Main Streamlit app."""
+    st.set_page_config(
+        page_title="Bitcoin Price Prediction",
+        page_icon="📈",
+        layout="wide",
+    )
+
+    st.title("📈 Bitcoin Price Prediction")
+    st.markdown("Real-time OHLCV forecasting with SARIMAX, Prophet, and LSTM")
+
+    (
+        model_name,
+        mode_name,
+        lookback_days,
+        iteration_count,
+        period_count,
+        auto_refresh,
+        run_once,
+    ) = _sidebar_settings()
+
     # Main area
     plot_placeholder = st.empty()
     status_placeholder = st.empty()
@@ -195,30 +252,14 @@ def main() -> None:
     if run_once or auto_refresh:
         while True:
             with status_placeholder.container():
-                st.info(f"Running prediction cycle with {model_choice}...")
+                st.info(f"Running prediction cycle with {model_name}...")
 
-            # Cast streamlit widget returns to expected types
-            model_name_str: str = model_choice if isinstance(model_choice, str) else "SARIMAX"
-            mode_str: str = mode if isinstance(mode, str) else "current"
-
-            def _to_int(v: Any, default: int) -> int:
-                if isinstance(v, int):
-                    return v
-                if isinstance(v, float):
-                    return int(v)
-                return default
-
-            lookback_int: int = _to_int(lookback, SETTINGS.default_lookback_days)
-            iterations_int: int = _to_int(iterations, SETTINGS.default_iterations)
-            prediction_periods_int: int = _to_int(
-                prediction_periods, SETTINGS.default_prediction_periods
-            )
             config = PredictionConfig(
-                model_name=model_name_str,
-                mode=mode_str,
-                lookback=lookback_int,
-                iterations=iterations_int,
-                prediction_periods=prediction_periods_int,
+                model_name=model_name,
+                mode=mode_name,
+                lookback=lookback_days,
+                iterations=iteration_count,
+                prediction_periods=period_count,
                 plot_placeholder=plot_placeholder,
             )
             run_prediction_cycle(config)
