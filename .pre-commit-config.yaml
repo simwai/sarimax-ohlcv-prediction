@@ -1,0 +1,76 @@
+# Pre-commit hooks for sarimax-ohlcv-prediction
+# Install: pdm run pre-commit install
+# Run: pdm run pre-commit run --all-files
+
+repos:
+  # Secret detection - always first
+  - repo: https://github.com/trufflesecurity/trufflehog
+    rev: v3.88.2
+    hooks:
+      - id: trufflehog
+        name: TruffleHog Secret Scanner
+        entry: trufflehog filesystem --no-verification
+        types: [file]
+        exclude: ^(.*\.lock$|.*\.log$|.*\.pyc$|__pycache__|.*\.egg-info)
+        always_run: true
+        pass_filenames: false
+
+  # Formatter - ruff format (runs first, auto-fix)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.7
+    hooks:
+      - id: ruff-format
+        name: Ruff Format
+        types: [python]
+        args: [--config=pyproject.toml]
+        pass_filenames: false
+
+  # Linter - ruff check (runs second, auto-fix)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.7
+    hooks:
+      - id: ruff
+        name: Ruff Lint
+        types: [python]
+        args: [--config=pyproject.toml, --fix]
+        pass_filenames: false
+
+  # Type checker - pyrefly (whole project, no filenames)
+  - repo: local
+    hooks:
+      - id: pyrefly
+        name: Pyrefly Type Check
+        entry: pdm run pyrefly check
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true
+
+  # Fast unit tests only
+  - repo: local
+    hooks:
+      - id: pytest-fast
+        name: Fast Unit Tests
+        entry: pdm run pytest -x -q --ignore=tests/integration
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true
+
+  # File hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+ci:
+  autofix_commit_msg: "chore: pre-commit autofixes"
+  autofix_prerequisites: [pdm]
+  skip: []

@@ -15,11 +15,11 @@ from prompt_toolkit.styles import Style
 
 from ..viz.rich import console
 from ..viz.theme import ICONS, PALETTE
-from .repl import (
+from .repl_core import (
     _CMD_HANDLERS,
     parse_command,
 )
-from .repl import (
+from .repl_core import (
     run_repl as run_rich_repl,
 )
 

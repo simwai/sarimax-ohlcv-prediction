@@ -274,7 +274,7 @@ def compare(
     """Compare all models with progress, scoring, timeout - non-REPL version."""
     # lazy import to avoid circular
     from ..viz.rich import print_model_comparison
-    from .repl import _run_compare_core
+    from .compare_core import _run_compare_core
 
     with cli_console.status(f"[status.running]Fetching {mode} data ({lookback}d)..."):
         data = fetch_with_retry(_as_mode(mode), lookback, use_cache=not no_cache)
@@ -310,7 +310,7 @@ def benchmark(
 ) -> None:
     """Benchmark all models on held-out tail (alias for compare --full)."""
     from ..viz.rich import print_model_comparison
-    from .repl import _run_compare_core
+    from .compare_core import _run_compare_core
 
     with cli_console.status(f"[status.running]Fetching {mode} data ({lookback}d)..."):
         data = fetch_with_retry(_as_mode(mode), lookback, use_cache=not no_cache)
@@ -329,20 +329,11 @@ def benchmark(
 
 
 @app.command()
-def repl(
-    classic: bool = typer.Option(
-        False, "--classic", help="Use classic Rich REPL instead of inquirer-style"
-    ),
-) -> None:
-    """Start interactive REPL (inquirer-style with autocomplete by default)."""
-    if classic:
-        from .repl import run_repl
+def repl() -> None:
+    """Start interactive REPL (inquirer-style with autocomplete)."""
+    from .repl_inquirer import run_repl
 
-        run_repl()
-    else:
-        from .repl_inquirer import run_repl
-
-        run_repl()
+    run_repl()
 
 
 # Cache management commands

@@ -1,10 +1,23 @@
 """Cache key builders."""
 
 import hashlib
+from dataclasses import dataclass
 
 import pandas as pd
 
 from ..config import SETTINGS
+
+
+@dataclass(frozen=True)
+class ModelKeyParams:
+    """Parameters for building a model cache key."""
+
+    model_name: str
+    symbol: str
+    timeframe: str
+    lookback: int
+    iterations: int
+    data_hash: str
 
 
 def _sanitize(s: str) -> str:
@@ -48,30 +61,18 @@ def ohlcv_key(symbol: str, timeframe: str, mode: str, lookback: int) -> str:
     return f"ohlcv:{_sanitize(symbol)}:{_sanitize(timeframe)}:{mode}:{lookback}"
 
 
-def model_key(
-    model_name: str,
-    symbol: str,
-    timeframe: str,
-    lookback: int,
-    iterations: int,
-    data_hash: str,
-) -> str:
+def model_key(params: ModelKeyParams) -> str:
     """Build cache key for trained model.
 
     Args:
-        model_name: Model class name (e.g., "SARIMAX")
-        symbol: Trading symbol
-        timeframe: Timeframe
-        lookback: Training data lookback days
-        iterations: Training iterations/epochs
-        data_hash: Hash of training data
+        params: Bundled model identity and training parameters.
 
     Returns:
         Cache key string
     """
     return (
-        f"model:{model_name}:{_sanitize(symbol)}:{_sanitize(timeframe)}:"
-        f"{lookback}:{iterations}:{data_hash}"
+        f"model:{params.model_name}:{_sanitize(params.symbol)}:{_sanitize(params.timeframe)}:"
+        f"{params.lookback}:{params.iterations}:{params.data_hash}"
     )
 
 
@@ -113,12 +114,14 @@ def get_model_key_from_params(
 ) -> str:
     """Build model key using SETTINGS for symbol/timeframe."""
     return model_key(
-        model_name,
-        SETTINGS.symbol,
-        SETTINGS.timeframe,
-        lookback,
-        iterations,
-        data_hash,
+        ModelKeyParams(
+            model_name=model_name,
+            symbol=SETTINGS.symbol,
+            timeframe=SETTINGS.timeframe,
+            lookback=lookback,
+            iterations=iterations,
+            data_hash=data_hash,
+        )
     )
 
 

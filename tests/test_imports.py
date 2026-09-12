@@ -26,7 +26,7 @@ def test_imports() -> None:
     assert hasattr(viz, "plotly")
     assert hasattr(viz, "rich")
     assert hasattr(cli, "app")
-    assert hasattr(cli, "repl")
+    assert hasattr(cli, "repl_inquirer")
 
 
 def test_model_registry() -> None:
