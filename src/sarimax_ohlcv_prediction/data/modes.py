@@ -10,3 +10,8 @@ def as_mode(mode: str) -> Mode:
     if mode not in ("current", "historical"):
         raise ValueError(f"Mode must be 'current' or 'historical', got: {mode}")  # noqa: TRY003
     return cast(Mode, mode)
+
+
+def _as_mode(mode: str) -> Mode:
+    """Validate and cast mode string to Mode."""
+    return as_mode(mode)

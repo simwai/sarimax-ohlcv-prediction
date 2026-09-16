@@ -13,7 +13,7 @@ import joblib
 import pandas as pd
 from pmdarima import auto_arima
 
-from .base import ModelBase
+from .base import ModelBase, validate_model_envelope
 
 logger = logging.getLogger(__name__)
 
@@ -237,14 +237,13 @@ class SARIMAXModel(ModelBase):
     @classmethod
     def load(cls, path: str) -> "SARIMAXModel":
         """Load model from disk, rejecting foreign envelopes."""
-        data = joblib.load(path)
-        if not isinstance(data, dict) or data.get("format", "sarimax-v0") not in (
-            "sarimax-v0",
-            "sarimax-v1",
-        ):
-            raise ValueError(_BAD_ENVELOPE_MSG.format(path=path))  # noqa: TRY003
-        if any(key not in data for key in _REQUIRED_KEYS):
-            raise ValueError(_BAD_ENVELOPE_MSG.format(path=path))  # noqa: TRY003
+        data = validate_model_envelope(
+            joblib.load(path),
+            model_name="SARIMAX",
+            required_keys=_REQUIRED_KEYS,
+            supported_formats=("sarimax-v0", "sarimax-v1"),
+            path=path,
+        )
         model = cls(
             seasonal=data.get("seasonal", True),
             m_range=data.get("m_range", range(7, 50)),

@@ -85,3 +85,24 @@ class ModelBase(ABC):
         if self._data_hash is None:
             return "unknown"
         return self._data_hash
+
+
+_ENVELOPE_MSG = "Unrecognized {model} model file: {path}"
+
+
+def validate_model_envelope(
+    data: object,
+    *,
+    model_name: str,
+    required_keys: tuple[str, ...],
+    supported_formats: tuple[str, ...],
+    path: str,
+) -> dict[str, object]:
+    """Validate a loaded model envelope and return the payload dict."""
+    if not isinstance(data, dict):
+        raise ValueError(_ENVELOPE_MSG.format(model=model_name, path=path))  # noqa: TRY003
+    if data.get("format", supported_formats[0]) not in supported_formats:
+        raise ValueError(_ENVELOPE_MSG.format(model=model_name, path=path))  # noqa: TRY003
+    if any(key not in data for key in required_keys):
+        raise ValueError(_ENVELOPE_MSG.format(model=model_name, path=path))  # noqa: TRY003
+    return data

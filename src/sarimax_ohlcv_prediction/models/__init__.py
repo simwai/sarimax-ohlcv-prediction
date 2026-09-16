@@ -12,9 +12,10 @@ from ..cache import (
     get_model_key_from_params,
 )
 from ..config import SETTINGS
-from .base import BaseModel, ModelBase
+from .base import ModelBase
 from .lstm import LSTMModel
 from .prophet import ProphetModel
+from .protocol import BaseModel
 from .sarimax import SARIMAXModel
 
 logger = logging.getLogger(__name__)

@@ -15,7 +15,7 @@ import streamlit as st
 
 from .config import SETTINGS
 from .data.fetcher import fetch_with_retry
-from .data.modes import as_mode as _as_mode
+from .data.modes import _as_mode
 from .data.processor import create_future_timestamps
 from .models import MODEL_REGISTRY, create_model
 from .viz.plotly import create_prediction_chart

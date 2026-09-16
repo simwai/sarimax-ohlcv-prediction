@@ -153,7 +153,6 @@ Size: [XS/S/M/L] -- [LOC band sanity check]
 ICE: [I*C*E]
 Milestone: [id]
 Story: [story id or n/a]
-Parallel: [P] [yes|no] -- [runs in parallel with which task ids]
 MVP: [core|supporting] -- [mvp-first ordering within the story]
 Test-first: [yes|no] -- [plan-level ordering signal; never a test-authoring grant]
 Definition of done:
@@ -221,17 +220,18 @@ Soft tier:
   - Greenfield skip: mark `[x] S1-S17 -- skipped (greenfield)` when CHECKLIST/REVIEW are skipped per the greenfield branch.
 
 Logical tier (L1-L10):
-- [ ] L1
-- [ ] L2
-- [ ] L3
-- [ ] L4
-- [ ] L5
-- [ ] L6
-- [ ] L7
-- [ ] L8
-- [ ] L9
-- [ ] L10
+- [ ] L1 -- [blocking|advisory]
+- [ ] L2 -- [blocking|advisory]
+- [ ] L3 -- [blocking|advisory]
+- [ ] L4 -- [blocking|advisory]
+- [ ] L5 -- [blocking|advisory]
+- [ ] L6 -- [blocking|advisory]
+- [ ] L7 -- [blocking|advisory]
+- [ ] L8 -- [blocking|advisory]
+- [ ] L9 -- [blocking|advisory]
+- [ ] L10 -- [blocking|advisory]
   - Greenfield skip: mark `[x] L1-L10 -- skipped (greenfield)` when CHECKLIST/REVIEW are skipped per the greenfield branch.
+  - Blocking vs advisory is determined at discovery time per `04-rubrics.md`.
 
 Verification:
 - Build: pending -- [command]
@@ -303,107 +303,15 @@ Verified evidence:
 Status:
 - Ready for review, or
 - Blocked pending evidence
-```
+## Review mode selection
 
-## `DOCS_PARALLEL` template
+REVIEW has two cadences: `interactive` and `consolidated`. The agent selects the cadence at REVIEW entry using the first match below:
 
-```txt
-[PHASE: DOCS_PARALLEL]
+- Explicit user override: `/review-consolidated` or `/review-interactive` command sets `review_mode` in session state.
+- Auto-select: when the file inventory has >10 files or >20 estimated batches, default to `consolidated`; otherwise default to `interactive`.
+- The user may change modes at any time with the slash commands.
 
-# For the human
-[2-4 plain-language sentences: parallel docs lookup launched, multiple dependency types being researched concurrently]
-
-# For the agent
-
-# Parallel Lookup Groups
-Groups: [npm: N deps, pip: M deps, cargo: K deps, go: L deps, maven: P deps, gradle: Q deps]
-Active: [group name] -- [current dep / total] -- [status]
-Completed: [group name] -- [evidence recorded]
-
-# Lookup State (partitioned per group)
-npm:
-  Dependencies: [dep1, dep2, ...]
-  Evidence: [count] provisional
-  Status: [in-progress|complete|failed]
-pip:
-  Dependencies: [dep1, dep2, ...]
-  Evidence: [count] provisional
-  Status: [in-progress|complete|failed]
-cargo:
-  Dependencies: [dep1, dep2, ...]
-  Evidence: [count] provisional
-  Status: [in-progress|complete|failed]
-go:
-  Dependencies: [dep1, dep2, ...]
-  Evidence: [count] provisional
-  Status: [in-progress|complete|failed]
-maven:
-  Dependencies: [dep1, dep2, ...]
-  Evidence: [count] provisional
-  Status: [in-progress|complete|failed]
-gradle:
-  Dependencies: [dep1, dep2, ...]
-  Evidence: [count] provisional
-  Status: [in-progress|complete|failed]
-
-Aggregation: [pending|complete]
-Output: Unified evidence written to main session state on aggregation complete
-```
-
-This phase runs automatically when CHECKLIST detects multiple dependency types. Subagents spawned per dependency type with partitioned evidence collection (max 3 concurrent). The aggregation step produces unified evidence for the consolidated REVIEW phase.
-```
-
-## `PARALLEL_REVIEW` template
-
-```txt
-[PHASE: PARALLEL_REVIEW]
-
-# For the human
-[2-4 plain-language sentences: parallel review launched, N reviewers + tester reviewing concurrently]
-
-# For the agent
-
-# Parallel Progress
-Sensei-1: [phase] -- [current batch/total] -- [status] -- [layer: controllers]
-Sensei-2: [phase] -- [current batch/total] -- [status] -- [layer: services]
-Sensei-N: [phase] -- [current batch/total] -- [status] -- [layer: utils]
-Tester: [phase] -- [current batch/total] -- [status]
-Merge: [pending|complete]
-
-# Sensei State 1 (partitioned)
-Review cursor: [file:batch]
-Findings: [count] provisional
-Open questions: [count]
-Review decision: [pending|complete]
-Layer: controllers
-
-# Sensei State 2 (partitioned)
-Review cursor: [file:batch]
-Findings: [count] provisional
-Open questions: [count]
-Review decision: [pending|complete]
-Layer: services
-
-# Sensei State N (partitioned)
-Review cursor: [file:batch]
-Findings: [count] provisional
-Open questions: [count]
-Review decision: [pending|complete]
-Layer: utils
-
-# Tester State (partitioned)
-Review cursor: [file:batch]
-Findings: [count] provisional
-Test strategy: [draft|complete]
-Binding items: [count]
-Strong hints: [count]
-
-Merge protocol: See 07-protocols.md `## REVIEW Merge Protocol`
-Output: Unified findings written to main session state on merge complete
-```
-
-This phase runs automatically when CHECKLIST inventory > 1 file and not greenfield. Partitions file inventory by architectural layer (controllers/, services/, repositories/, middleware/, components/, hooks/, stores/, utils/, tests/); spawns N BabaSensei reviewers (N = min(ceil(files/50), 4)) + BabaTester. The merge step produces unified findings for the consolidated REVIEW phase.
-```
+In `interactive` mode, the agent emits one batch per response and waits for user confirmation before advancing. In `consolidated` mode, the agent reviews all files and batches internally, then emits one final REVIEW response with `Batch: AGGREGATE -- all files complete` and a single aggregate `# Decision Needed` block. Consolidated mode never auto-confirms findings; all mitigations remain provisional until the user answers the aggregate decision section.
 
 ## `REVIEW` template
 
@@ -419,7 +327,6 @@ the one decision you must confirm]
 # Multi-file progress
 Reviewed: [X/Y] files -- [Z] batches complete
 Review mode: [interactive|consolidated]
-Parallel progress: [sensei-1: batch N/M, sensei-2: batch N/M, ..., tester: batch N/M | merged: pending|complete]
 
 # Findings
 File: [file path or ALL FILES]
@@ -444,8 +351,44 @@ Validation loop (run when any finding is at confidence <= 70%):
 - Final confidence: [X]%
 - Terminal classification: [confirmed | disputed]
 
+## Logical Findings
+- [criterion id] -- [line/range] -- [one-sentence logical issue] ([severity: blocking|advisory])
+  - Severity: [blocking|advisory] -- [one-line rationale]
+  - Mitigations:
+    - **A.** [short action] (Recommended)
+      - Pros: [one line]
+      - Cons: [one line]
+    - B. [short action]
+      - Pros: [one line]
+      - Cons: [one line]
+    - C. [short action, if needed]
+      - Pros: [one line]
+      - Cons: [one line]
+
 ## Informational (when applicable)
 - [criterion id] -- [line/range] -- [one-sentence note]
+
+## Confirmed Items (ready for handoff)
+- [finding_id] -- [file] -- [mitigation selected]
+
+## Pending Review Items
+- [finding_id] -- [file] -- [status: in review]
+
+## Partial Handoff Available
+- Confirmed: N items
+- Pending: M items
+- Recommended: Hand off confirmed items now, continue reviewing pending items
+
+## Partial handoff decision rule
+Offer partial handoff immediately when any finding is confirmed in REVIEW.
+If the user does not respond within one turn, fall back to full review.
+Do not offer partial handoff when only one item remains pending.
+
+## Plan Draft (auto-generated)
+- id: [finding_id]
+  change: [auto-generated from finding]
+  verify: [auto-generated]
+  expect: [auto-generated]
 
 ## Decision Items (if any)
 - Each decision uses `# Decision Needed` format per `00-system.md`
@@ -473,6 +416,9 @@ Please confirm:
 
 Next batch:
 - [file path] -- [lines X-Y or FULL] -- [next batch, or "all files complete - confirm aggregate decision before PLAN"]
+
+Sections omitted (when applicable):
+- [Cross-team requirements / Validation loop / Open questions / Informational / Confirmed Items / Pending Review Items / Partial Handoff Available / Plan Draft -- list the omitted sections and why]
 ```
 
 REVIEW owns confirmation. There is no standalone CONFIRM phase.
@@ -510,6 +456,10 @@ decision you must approve]
 
 # Fix Plan
 Target: [file/module]
+Scope: [full|partial]
+Pending review items: [list of finding_ids still under review, or "none"]
+
+Source: [auto-generated from REVIEW findings | manual]
 
 Will change:
 - id: [unique id]
@@ -530,9 +480,40 @@ Conventions:
 Risks:
 - [risk]
 
+Logical constraints:
+- [constraint from L-tier findings that the fix must preserve]
+
 Awaiting:
 - Plan approval
 ```
+
+## Plan item templates by finding type
+
+These templates auto-populate `Will change` items from REVIEW findings. They are starting points; the user may edit any field in PLAN.
+
+### H2 -- Injection
+- id: [finding_id]
+  change: Replace [string concatenation/raw query] with parameterized query using [library]
+  verify: rg "SELECT.*\+" [file] || rg "query\(.*\+" [file]
+  expect: silent
+  verify: rg "prepareStatement|parameterized|bindParam" [file]
+  expect: pass
+
+### S4 -- Duplication
+- id: [finding_id]
+  change: Extract repeated logic from lines [X-Y] into [function name] in [file]
+  verify: [detect duplication pattern]
+  expect: silent
+  verify: rg "function [name]" [file]
+  expect: pass
+
+### H12 -- Idiom consistency
+- id: [finding_id]
+  change: Refactor lines [X-Y] to use [dominant idiom] consistent with file pattern
+  verify: [detect non-conforming pattern]
+  expect: silent
+  verify: [detect conforming pattern]
+  expect: pass
 
 ## `PATCH` template
 
@@ -547,6 +528,8 @@ follow-up]
 
 # Rewrite Contract
 Target: [file]
+Scope: [full|partial]
+Pending review items: [list of finding_ids still under review, or "none"]
 
 Must preserve:
 
@@ -573,7 +556,6 @@ Forbidden in patch:
 - Lint gate (per edit step): PASS/FAIL/SKIPPED -- [command] -- [results]
 - Checks run: [commands] or none available
 - Results: PASS/FAIL/SKIPPED -- [notes]
-- Parallel groups: [lint+typecheck: sequential], [unit: parallel 3/3], [integration: sequential], [e2e: sequential] -- total 45s (vs 78s sequential)
 - Regression baseline (expected FAIL): PASS|FAIL/SKIPPED -- [command] -- [note or SKIPPED reason]
 - Regression post-fix (expected PASS): PASS|FAIL/SKIPPED -- [command] -- [note or SKIPPED reason]
 - Playwright smoke: PASS/FAIL/SKIPPED -- [URL] -- [note]
@@ -773,13 +755,6 @@ plan_actual_history: [list of (timestamp, items, verdict) tuples]
 
 - [server]: [ready|unavailable|not_checked]
 
-## Parallel Budget
-
-parallel_budget: {docs: 3, checklist: 4, patch: 4}
-docs_partitions: [npm, pip, cargo, go, maven, gradle] -- [active subset]
-checklist_partitions: [layer1, layer2, ...] -- [active subset]
-patch_isolated_suites: [suite1, suite2, ...] -- [detected isolated test suites]
-
 ## Drift State
 
 prior_phase: [phase or n/a]
@@ -787,23 +762,15 @@ spec_version: [x.y.z or n/a]
 
 ## Phase Status
 
-phase_status: {sensei: [phase|n/a], tester: [phase|n/a], merge: [pending|complete|n/a]}
+phase_status: {sensei: [phase|n/a], tester: [phase|n/a], dev: [phase|n/a], merge: [pending|complete|n/a]}
 
-## Sensei State 1
+## Confirmed Items
 
-[partitioned session state for BabaSensei reviewer 1 during PARALLEL_REVIEW; contains review_cursor, findings, open_questions, review_decision, layer]
+- [finding_id] -- [file] -- [status: planned|patched|verified] -- [handoff_at]
 
-## Sensei State 2
+## Pending Review Items
 
-[partitioned session state for BabaSensei reviewer 2 during PARALLEL_REVIEW; contains review_cursor, findings, open_questions, review_decision, layer]
-
-## Sensei State N
-
-[partitioned session state for BabaSensei reviewer N during PARALLEL_REVIEW; contains review_cursor, findings, open_questions, review_decision, layer]
-
-## Tester State
-
-[partitioned session state for BabaTester during PARALLEL_REVIEW; contains review_cursor, findings, test_strategy, binding_items, strong_hints]
+- [finding_id] -- [file] -- [status: reviewing] -- [assigned_reviewer]
 
 ## Discovery Evidence
 

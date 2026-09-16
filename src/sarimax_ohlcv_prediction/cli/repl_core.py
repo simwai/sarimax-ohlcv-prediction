@@ -9,45 +9,19 @@ from rich.table import Table
 from ..backtest import STRATEGY_REGISTRY, run_backtest
 from ..config import SETTINGS
 from ..data.fetcher import fetch_with_retry
-from ..data.modes import Mode, as_mode
+from ..data.modes import _as_mode
 from ..models import MODEL_REGISTRY, create_model
-from ..viz.components import DATA_STYLES, print_backtest_results
+from ..viz.components import (
+    DATA_STYLES,
+    print_backtest_results,
+    print_inline_status,
+    print_verbose_status,
+)
 from ..viz.rich import console, print_data_summary, print_model_comparison, print_predictions_table
 from .compare_core import _parse_compare_args, _run_compare_core
+from .help_table import HelpTable
 
 _INVALID_MODE_MSG = "Invalid mode: {mode}"
-
-
-class HelpTable(Table):
-    """Help table with fixed columns: Command | Args | Description."""
-
-    def __init__(self):
-        super().__init__(
-            title="REPL Commands",
-            title_style="panel.title",
-            box=None,
-            padding=(0, 1),
-            collapse_padding=True,
-            header_style="table.header",
-            row_styles=["table.row_even", "table.row_odd"],
-        )
-        self.add_column("Command", style="brand", no_wrap=True, min_width=14)
-        self.add_column("Args", style="warning", min_width=28)
-        self.add_column("Description", style="success")
-
-    def add_section(self, title: str) -> None:  # pyrefly: ignore[bad-override] -- intentional REPL helper
-        self.add_row(f"[section]{title}[/]", "", "")
-
-    def add_command(self, cmd: str, args: str, desc: str) -> None:
-        self.add_row(cmd, args, desc)
-
-
-def _as_mode(mode: str) -> Mode:
-    """Validate and cast mode string to Literal."""
-    try:
-        return as_mode(mode)
-    except ValueError as exc:
-        raise ValueError(_INVALID_MODE_MSG.format(mode=mode)) from exc
 
 
 def parse_command(line: str) -> tuple[str, list[str]]:
@@ -143,7 +117,6 @@ def cmd_help(args: list[str]) -> None:
     print_help(args)
 
 
-@register_handler("status")
 def print_status(args: list[str]) -> None:
     """Print current REPL state compactly - inline status line, verbose table on --verbose."""
     verbose = "--verbose" in args or "-v" in args
@@ -158,35 +131,6 @@ def print_status(args: list[str]) -> None:
         print_verbose_status(data_str, model_str, path_str, pred_str)
     else:
         print_inline_status(data_str, model_str, path_str, pred_str)
-
-
-def print_inline_status(data_str: str, model_str: str, path_str: str, pred_str: str) -> None:
-    line = (
-        f"[brand]data[/]: {data_str}  "
-        f"[brand]model[/]: {model_str}  "
-        f"[brand]path[/]: {path_str}  "
-        f"[brand]pred[/]: {pred_str}"
-    )
-    console.print(line)
-
-
-def print_verbose_status(data_str: str, model_str: str, path_str: str, pred_str: str) -> None:
-    table = Table(
-        title="REPL Status",
-        title_style="panel.title",
-        box=None,
-        padding=(0, 1),
-        collapse_padding=True,
-        header_style="table.header",
-        row_styles=["table.row_even", "table.row_odd"],
-    )
-    table.add_column("Key", style="brand")
-    table.add_column("Value", style="ui.text")
-    table.add_row("Data rows", data_str)
-    table.add_row("Model", model_str)
-    table.add_row("Model path", path_str)
-    table.add_row("Predictions", pred_str)
-    console.print(table)
 
 
 @register_handler("clear")

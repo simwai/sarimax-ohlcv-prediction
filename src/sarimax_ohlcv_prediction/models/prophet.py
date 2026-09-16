@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from prophet import Prophet
 
-from .base import ModelBase
+from .base import ModelBase, validate_model_envelope
 
 logger = logging.getLogger(__name__)
 
@@ -130,14 +130,13 @@ class ProphetModel(ModelBase):
     @classmethod
     def load(cls, path: str) -> "ProphetModel":
         """Load model from disk, rejecting foreign envelopes."""
-        data = joblib.load(path)
-        if not isinstance(data, dict) or data.get("format", "prophet-v0") not in (
-            "prophet-v0",
-            "prophet-v1",
-        ):
-            raise ValueError(_BAD_ENVELOPE_MSG.format(path=path))  # noqa: TRY003
-        if any(key not in data for key in _REQUIRED_KEYS):
-            raise ValueError(_BAD_ENVELOPE_MSG.format(path=path))  # noqa: TRY003
+        data = validate_model_envelope(
+            joblib.load(path),
+            model_name="Prophet",
+            required_keys=_REQUIRED_KEYS,
+            supported_formats=("prophet-v0", "prophet-v1"),
+            path=path,
+        )
         model = cls(
             daily_seasonality=data.get("daily_seasonality", False),
             yearly_seasonality=data.get("yearly_seasonality", False),

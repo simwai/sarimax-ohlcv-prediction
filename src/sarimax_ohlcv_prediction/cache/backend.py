@@ -257,19 +257,19 @@ class CacheManager:
         return entries
 
 
-# Global cache manager holder (dict avoids a global rebinding statement)
-_cache_holder: dict[str, CacheManager | None] = {"manager": None}
+# Global cache manager singleton
+_cache_manager: CacheManager | None = None
 
 
 def get_cache_manager() -> CacheManager:
     """Get or create the global cache manager."""
-    manager = _cache_holder["manager"]
-    if manager is None:
-        manager = CacheManager()
-        _cache_holder["manager"] = manager
-    return manager
+    global _cache_manager
+    if _cache_manager is None:
+        _cache_manager = CacheManager()
+    return _cache_manager
 
 
 def reset_cache_manager() -> None:
     """Reset the global cache manager (for testing)."""
-    _cache_holder["manager"] = None
+    global _cache_manager
+    _cache_manager = None

@@ -12,7 +12,7 @@ import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 
 from ..config import SETTINGS
-from .base import ModelBase
+from .base import ModelBase, validate_model_envelope
 
 logger = logging.getLogger(__name__)
 
@@ -301,12 +301,13 @@ class LSTMModel(ModelBase):
         if not TF_AVAILABLE:
             raise RuntimeError(_TF_NOT_INSTALLED_LOAD)
 
-        data = joblib.load(path)
-        if not isinstance(data, dict) or data.get("format", "lstm-v0") not in (
-            "lstm-v0",
-            "lstm-v1",
-        ):
-            raise ValueError(_BAD_ENVELOPE_MSG.format(path=path))  # noqa: TRY003
+        data = validate_model_envelope(
+            joblib.load(path),
+            model_name="LSTM",
+            required_keys=("sequence_length", "columns"),
+            supported_formats=("lstm-v0", "lstm-v1"),
+            path=path,
+        )
         model = cls(
             sequence_length=data.get("sequence_length", SETTINGS.lstm_sequence_length),
             epochs=data.get("epochs", SETTINGS.lstm_epochs),
