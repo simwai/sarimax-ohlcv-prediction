@@ -70,6 +70,18 @@ repos:
       - id: mixed-line-ending
         args: [--fix=lf]
 
+  # Auto-update README.md Table of Contents
+  - repo: local
+    hooks:
+      - id: update-readme-toc
+        name: Update README TOC
+        entry: python scripts/update_readme_toc.py --path README.md
+        language: system
+        types: [markdown]
+        files: ^README\.md$
+        pass_filenames: false
+        always_run: false
+
 ci:
   autofix_commit_msg: "chore: pre-commit autofixes"
   autofix_prerequisites: [pdm]

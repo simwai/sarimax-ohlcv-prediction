@@ -88,32 +88,32 @@ skip-magic-trailing-comma = false
 
 [tool.ruff.lint]
 ignore = ["S101", "T201", "ARG001", "ARG002"]
-per-file-ignores = {
-    "tests/*" = ["S101", "T201"],
-    "index.py" = ["PLR0913", "PLR0917", "TRY301", "TRY003", "TRY300", "UP017"],
-    "src/sarimax_ohlcv_prediction/backtest/engine.py" = ["PLC0415"],
-    "src/sarimax_ohlcv_prediction/cli/main.py" = ["PLR0913", "PLR0917", "PLC0415", "E501"],
-    "src/sarimax_ohlcv_prediction/cli/commands/backtest.py" = ["PLR0913", "PLR0917", "PLC0415", "E501"],
-    "src/sarimax_ohlcv_prediction/cli/commands/cache.py" = ["PLR0913", "PLR0917", "PLC0415", "E501"],
-    "src/sarimax_ohlcv_prediction/cli/commands/compare.py" = ["PLR0913", "PLR0917", "PLC0415", "E501"],
-    "src/sarimax_ohlcv_prediction/cli/commands/explore.py" = ["PLR0913", "PLR0917", "PLC0415", "E501"],
-    "src/sarimax_ohlcv_prediction/cli/commands/fetch.py" = ["PLR0913", "PLR0917", "PLC0415", "E501"],
-    "src/sarimax_ohlcv_prediction/cli/commands/predict.py" = ["PLR0913", "PLR0917", "PLC0415", "E501"],
-    "src/sarimax_ohlcv_prediction/cli/commands/repl.py" = ["PLR0913", "PLR0917", "PLC0415", "E501"],
-    "src/sarimax_ohlcv_prediction/cli/commands/train.py" = ["PLR0913", "PLR0917", "PLC0415", "E501"],
-    "src/sarimax_ohlcv_prediction/cli/compare_core.py" = ["PLR0913", "PLR0917", "PLC0415"],
-    "src/sarimax_ohlcv_prediction/cli/repl_core.py" = ["E501", "PLR0913", "PLR0917", "TRY300"],
-    "src/sarimax_ohlcv_prediction/cli/repl_inquirer.py" = ["E501", "PLR0913", "PLR0917"],
-    "src/sarimax_ohlcv_prediction/data/fetcher.py" = ["TRY300"],
-    "src/sarimax_ohlcv_prediction/cache/backend.py" = ["PLW0603"],
-    "src/sarimax_ohlcv_prediction/models/base.py" = ["TRY004"],
-    "src/sarimax_ohlcv_prediction/models/__init__.py" = ["E501"],
-    "src/sarimax_ohlcv_prediction/services/cycle.py" = ["PLR0913", "PLR0917", "UP017"],
-    "src/sarimax_ohlcv_prediction/models/lstm.py" = ["PLR0913", "PLR0917", "TRY300", "PLE1206"],
-    "src/sarimax_ohlcv_prediction/models/prophet.py" = ["PLR0913", "PLR0917"],
-    "src/sarimax_ohlcv_prediction/streamlit_app.py" = ["PLR0913", "PLR0917", "UP017"],
-    "tests/test_imports.py" = ["I001"],
-}
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "T201"]
+"index.py" = ["PLR0913", "PLR0917", "TRY301", "TRY003", "TRY300", "UP017"]
+"src/sarimax_ohlcv_prediction/backtest/engine.py" = ["PLC0415"]
+"src/sarimax_ohlcv_prediction/cli/main.py" = ["PLR0913", "PLR0917", "PLC0415", "E501"]
+"src/sarimax_ohlcv_prediction/cli/commands/backtest.py" = ["PLR0913", "PLR0917", "PLC0415", "E501"]
+"src/sarimax_ohlcv_prediction/cli/commands/cache.py" = ["PLR0913", "PLR0917", "PLC0415", "E501"]
+"src/sarimax_ohlcv_prediction/cli/commands/compare.py" = ["PLR0913", "PLR0917", "PLC0415", "E501"]
+"src/sarimax_ohlcv_prediction/cli/commands/explore.py" = ["PLR0913", "PLR0917", "PLC0415", "E501"]
+"src/sarimax_ohlcv_prediction/cli/commands/fetch.py" = ["PLR0913", "PLR0917", "PLC0415", "E501"]
+"src/sarimax_ohlcv_prediction/cli/commands/predict.py" = ["PLR0913", "PLR0917", "PLC0415", "E501"]
+"src/sarimax_ohlcv_prediction/cli/commands/repl.py" = ["PLR0913", "PLR0917", "PLC0415", "E501"]
+"src/sarimax_ohlcv_prediction/cli/commands/train.py" = ["PLR0913", "PLR0917", "PLC0415", "E501"]
+"src/sarimax_ohlcv_prediction/cli/compare_core.py" = ["PLR0913", "PLR0917", "PLC0415"]
+"src/sarimax_ohlcv_prediction/cli/repl_core.py" = ["E501", "PLR0913", "PLR0917", "TRY300"]
+"src/sarimax_ohlcv_prediction/cli/repl_inquirer.py" = ["E501", "PLR0913", "PLR0917"]
+"src/sarimax_ohlcv_prediction/data/fetcher.py" = ["TRY300"]
+"src/sarimax_ohlcv_prediction/cache/backend.py" = ["PLW0603"]
+"src/sarimax_ohlcv_prediction/models/base.py" = ["TRY004"]
+"src/sarimax_ohlcv_prediction/models/__init__.py" = ["E501"]
+"src/sarimax_ohlcv_prediction/services/cycle.py" = ["PLR0913", "PLR0917", "UP017"]
+"src/sarimax_ohlcv_prediction/models/lstm.py" = ["PLR0913", "PLR0917", "TRY300", "PLE1206"]
+"src/sarimax_ohlcv_prediction/models/prophet.py" = ["PLR0913", "PLR0917"]
+"src/sarimax_ohlcv_prediction/streamlit_app.py" = ["PLR0913", "PLR0917", "UP017"]
+"tests/test_imports.py" = ["I001"]
 
 [tool.pyrefly]
 # pyrefly configuration for strict type checking

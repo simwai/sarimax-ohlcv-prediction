@@ -1,1 +1,26 @@
-.venv_win
+﻿.venv_win
+.session-locks/
+.playwright-mcp/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Tests
+.pytest_cache/
+.coverage
+htmlcov/
+junit.xml
+test-results/
+
+# Session artifacts
+SESSION_STATE-*.md
+
+# Models
+models/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,6 +1,6 @@
 /**
  * STARTUP Gate Plugin for opencode (simple event-based API)
- * 
+ *
  * Observes session lifecycle and tracks STARTUP phase verification.
  * The actual enforcement is done by the agent following instructions in opencode.jsonc.
  * This plugin provides visibility via toasts and logs.
@@ -36,7 +36,7 @@ export default async ({ client, $, project, directory, worktree }: {
         const sessionID = event.properties.sessionID;
         startupStates.set(sessionID, { verified: false });
         console.log(`[startup-gate] Session created: ${sessionID}`);
-        
+
         // Show reminder toast
         await $`opencode tui toast show --title "STARTUP Required" --message "Emit 00-system.md fingerprint before any response" --variant info`;
         return;
@@ -47,13 +47,13 @@ export default async ({ client, $, project, directory, worktree }: {
         const sessionID = event.properties.sessionID;
         const info = event.properties.info;
         const state = startupStates.get(sessionID) || { verified: false };
-        
+
         // Check session metadata for startup verification
         if (info.metadata?.startup_verified === true && info.metadata?.startup_fingerprint) {
           state.verified = true;
           state.fingerprint = info.metadata.startup_fingerprint;
           startupStates.set(sessionID, state);
-          
+
           console.log(`[startup-gate] Session ${sessionID} verified via metadata`);
           await $`opencode tui toast show --title "STARTUP Verified" --message "Fingerprint accepted, proceeding normally" --variant success`;
           return;
