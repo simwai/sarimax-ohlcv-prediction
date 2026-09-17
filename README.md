@@ -35,9 +35,9 @@
 
 <img src="assets/banner.svg" alt="SARIMAX OHLCV Prediction banner" width="100%" height="120">
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-4a1d96?style=for-the-badge&logo=python&logoColor=00e5ff&labelColor=2e1065&color=00e5ff)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-4a1d96?style=for-the-badge&labelColor=2e1065&color=00e5ff)](LICENSE)
-[![Ruff](https://img.shields.io/badge/lint-ruff%20%7C%20pyrefly%20%7C%20pytest-4a1d96?style=for-the-badge&labelColor=2e1065&color=00e5ff)](https://docs.astral.sh/ruff/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-2e1065?style=for-the-badge&logo=python&logoColor=00e5ff&labelColor=1a0b2e&logoColor=00e5ff)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-2e1065?style=for-the-badge&labelColor=1a0b2e&logoColor=00e5ff)](LICENSE)
+[![Ruff](https://img.shields.io/badge/lint-ruff%20%7C%20pyrefly%20%7C%20pytest-2e1065?style=for-the-badge&labelColor=1a0b2e&logoColor=00e5ff)](https://docs.astral.sh/ruff/)
 
 Bitcoin price prediction toolkit built on **SARIMAX**, **Prophet**, and **LSTM**. Fetches live and historical OHLCV data from Binance, trains forecasting models, runs vectorized backtests, and exposes both a **Typer CLI** and a **Streamlit GUI**.
 
@@ -80,11 +80,11 @@ config:
   theme: dark
   themeVariables:
     primaryColor: '#00e5ff'
-    primaryTextColor: '#0f0720'
+    primaryTextColor: '#ffffff'
     primaryBorderColor: '#00e5ff'
     lineColor: '#00e5ff'
     secondaryColor: '#1a0b2e'
-    tertiaryColor: '#0f0720'
+    tertiaryColor: '#1a0b2e'
 ---
 flowchart LR
     A["Data Layer\nccxt / Binance OHLCV"] --> B["Processor\nclean / resample / align"]
@@ -103,11 +103,11 @@ config:
   theme: dark
   themeVariables:
     primaryColor: '#00e5ff'
-    primaryTextColor: '#0f0720'
+    primaryTextColor: '#ffffff'
     primaryBorderColor: '#00e5ff'
     lineColor: '#00e5ff'
     secondaryColor: '#1a0b2e'
-    tertiaryColor: '#0f0720'
+    tertiaryColor: '#1a0b2e'
 ---
 flowchart LR
     FEED["Binance feed\n5m candles"] --> FETCH["fetcher.py\nfetch_with_retry"]
@@ -128,11 +128,11 @@ config:
   theme: dark
   themeVariables:
     primaryColor: '#00e5ff'
-    primaryTextColor: '#0f0720'
+    primaryTextColor: '#ffffff'
     primaryBorderColor: '#00e5ff'
     lineColor: '#00e5ff'
     secondaryColor: '#1a0b2e'
-    tertiaryColor: '#0f0720'
+    tertiaryColor: '#1a0b2e'
 ---
 classDiagram
     class BaseModel {
@@ -338,11 +338,11 @@ config:
   theme: dark
   themeVariables:
     primaryColor: '#00e5ff'
-    primaryTextColor: '#0f0720'
+    primaryTextColor: '#ffffff'
     primaryBorderColor: '#00e5ff'
     lineColor: '#00e5ff'
     secondaryColor: '#1a0b2e'
-    tertiaryColor: '#0f0720'
+    tertiaryColor: '#1a0b2e'
 ---
 flowchart LR
     MODEL["fitted model"] --> PREDICT["predict()\nfull history"]
