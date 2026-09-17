@@ -323,13 +323,14 @@ flowchart LR
     PREDICT --> SIGNALS["strategy.generate_signals()\nentries / exits"]
     SLICE --> SIGNALS
     SIGNALS --> VBT["vbt.Portfolio.from_signals()\nfees / slippage / freq"]
-    VBT --> RESULT["BacktestResult\nreturn / sharpe / drawdown / trades"]
+    VBT --> RESULT["BacktestResult\nreturn / calmar / sortino / drawdown / trades"]
 ```
 
 Key metrics returned by `run_backtest`:
 
 - Total return
-- Sharpe ratio
+- Calmar ratio
+- Sortino ratio
 - Maximum drawdown
 - Win rate
 - Total trades

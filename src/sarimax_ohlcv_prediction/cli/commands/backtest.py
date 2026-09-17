@@ -58,7 +58,8 @@ def register(app) -> None:
 
         print_backtest_results(
             total_return=result.total_return,
-            sharpe=result.sharpe_ratio,
+            calmar=result.calmar_ratio,
+            sortino=result.sortino_ratio,
             max_dd=result.max_drawdown,
             win_rate=result.win_rate,
             total_trades=result.total_trades,

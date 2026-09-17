@@ -116,7 +116,8 @@ def _result_to_metrics(result: BacktestResult) -> dict[str, Any]:
     """Convert BacktestResult to the metrics dict shape expected by the report."""
     return {
         "total_return": result.total_return,
-        "sharpe": result.sharpe_ratio,
+        "calmar": result.calmar_ratio,
+        "sortino": result.sortino_ratio,
         "max_drawdown": result.max_drawdown,
         "win_rate": result.win_rate,
         "num_trades": result.total_trades,
@@ -141,7 +142,8 @@ def _build_kpi_table(metrics: dict[str, Any], usable: float, fonts: dict[str, st
 
     kpis = [
         (f"{metrics['total_return']:+.2%}", "Total Return"),
-        (f"{metrics['sharpe']:.2f}", "Sharpe Ratio"),
+        (f"{metrics['calmar']:.2f}", "Calmar Ratio"),
+        (f"{metrics['sortino']:.2f}", "Sortino Ratio"),
         (f"{metrics['max_drawdown']:.2%}", "Max Drawdown"),
         (f"{metrics['win_rate']:.2%}", "Win Rate"),
         (f"{int(metrics['num_trades']):,}", "Total Trades"),
@@ -222,7 +224,8 @@ def _build_results_table(result: BacktestResult, usable: float, fonts: dict[str,
             streak = 0
     values = [
         ("Total Return", f"{result.total_return:+.2%}"),
-        ("Sharpe Ratio", f"{result.sharpe_ratio:.2f}"),
+        ("Calmar Ratio", f"{result.calmar_ratio:.2f}"),
+        ("Sortino Ratio", f"{result.sortino_ratio:.2f}"),
         ("Max Drawdown", f"{result.max_drawdown:.2%}"),
         ("Win Rate", f"{result.win_rate:.2%}"),
         ("Total Trades", f"{result.total_trades:,}"),

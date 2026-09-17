@@ -330,7 +330,8 @@ def print_predictions_table(
 
 def print_backtest_results(  # noqa: PLR0913, PLR0917 -- fixed metric-card signature
     total_return: float,
-    sharpe: float,
+    calmar: float,
+    sortino: float,
     max_dd: float,
     win_rate: float,
     total_trades: int,
@@ -339,7 +340,8 @@ def print_backtest_results(  # noqa: PLR0913, PLR0917 -- fixed metric-card signa
     """Print backtest results as metric cards."""
     cards = [
         MetricCard("Total Return", f"{total_return:.2%}", "up" if total_return > 0 else "down"),
-        MetricCard("Sharpe Ratio", f"{sharpe:.2f}", "up" if sharpe > 1 else "down"),
+        MetricCard("Calmar Ratio", f"{calmar:.2f}", "up" if calmar > 1 else "down"),
+        MetricCard("Sortino Ratio", f"{sortino:.2f}", "up" if sortino > 1 else "down"),
         MetricCard("Max Drawdown", f"{max_dd:.2%}", "down"),
         MetricCard(
             "Win Rate", f"{win_rate:.2%}", "up" if win_rate > _WIN_RATE_THRESHOLD else "down"

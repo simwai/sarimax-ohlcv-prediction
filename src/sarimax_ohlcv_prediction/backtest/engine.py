@@ -30,7 +30,8 @@ class BacktestResult:
     """Results from a backtest run."""
 
     total_return: float
-    sharpe_ratio: float
+    calmar_ratio: float
+    sortino_ratio: float
     max_drawdown: float
     win_rate: float
     total_trades: int
@@ -143,7 +144,8 @@ def run_backtest(  # noqa: PLR0912
 
     return BacktestResult(
         total_return=_stat_float(stats, "Total Return [%]", scale=0.01),
-        sharpe_ratio=_stat_float(stats, "Sharpe Ratio"),
+        calmar_ratio=_stat_float(stats, "Calmar Ratio"),
+        sortino_ratio=_stat_float(stats, "Sortino Ratio"),
         max_drawdown=_stat_float(stats, "Max Drawdown [%]", scale=0.01),
         win_rate=_stat_float(stats, "Win Rate [%]", scale=0.01),
         total_trades=_stat_int(stats, "Total Trades"),
@@ -211,7 +213,8 @@ def print_backtest_result(result: BacktestResult) -> None:
     """Pretty print backtest results using themed components."""
     print_backtest_results(
         total_return=result.total_return,
-        sharpe=result.sharpe_ratio,
+        calmar=result.calmar_ratio,
+        sortino=result.sortino_ratio,
         max_dd=result.max_drawdown,
         win_rate=result.win_rate,
         total_trades=result.total_trades,

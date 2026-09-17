@@ -13,7 +13,8 @@ def _result() -> BacktestResult:
     """Create a minimal deterministic backtest result."""
     return BacktestResult(
         total_return=0.12,
-        sharpe_ratio=1.4,
+        calmar_ratio=1.2,
+        sortino_ratio=1.6,
         max_drawdown=-0.08,
         win_rate=0.58,
         total_trades=42,
@@ -24,7 +25,8 @@ def _result() -> BacktestResult:
         stats=pd.Series(
             {
                 "Total Return [%]": 12.0,
-                "Sharpe Ratio": 1.4,
+                "Calmar Ratio": 1.2,
+                "Sortino Ratio": 1.6,
                 "Max Drawdown [%]": -8.0,
                 "Win Rate [%]": 58.0,
                 "Total Trades": 42,
