@@ -37,7 +37,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-2e1065?style=for-the-badge&logo=python&logoColor=00e5ff&labelColor=1a0b2e&logoColor=00e5ff)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2e1065?style=for-the-badge&labelColor=1a0b2e&logoColor=00e5ff)](LICENSE)
-[![Ruff](https://img.shields.io/badge/lint-ruff%20%7C%20pyrefly%20%7C%20pytest-2e1065?style=for-the-badge&labelColor=1a0b2e&logoColor=00e5ff)](https://docs.astral.sh/ruff/)
+[![Ruff](https://img.shields.io/badge/lint-ruff%20%7C%20pyrefly-2e1065?style=for-the-badge&labelColor=1a0b2e&logoColor=00e5ff)](https://docs.astral.sh/ruff/)
 
 Bitcoin price prediction toolkit built on **SARIMAX**, **Prophet**, and **LSTM**. Fetches live and historical OHLCV data from Binance, trains forecasting models, runs vectorized backtests, and exposes both a **Typer CLI** and a **Streamlit GUI**.
 
