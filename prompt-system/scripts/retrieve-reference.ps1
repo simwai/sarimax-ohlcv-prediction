@@ -33,17 +33,17 @@ function Test-PoolInitialized {
 
 function Read-Manifest {
     param([string]$Path)
-
+    
     $content = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
     if (-not $content) { return @{ schema_version = ''; pool = @(); entries = @() } }
-
+    
     # Minimal YAML parser for our specific schema. Supports:
     # - Top-level scalar: key: "value"
     # - List of scalars: key: [a, b, c]
     # - List of mappings: key: [ { k: v }, { k: v } ]
     # - Nested mappings with 2-space indent
     # Does NOT support multi-line strings, anchors, or complex YAML.
-
+    
     $lines = $content -split "`n"
     $result = @{ schema_version = ''; pool = @(); entries = @() }
     $currentSection = ''
@@ -54,16 +54,16 @@ function Read-Manifest {
     $nestDepth = 0
     $nestKey = ''
     $listKeys = @('pool', 'entries')
-
+    
     foreach ($line in $lines) {
         if ($line -match '^\s*#') { continue }
         if ($line -match '^\s*$') { continue }
-
+        
         # Top-level section: key: value or key: [items]
         if ($line -match '^([a-z_]+):\s*(.*)$') {
             $key = $matches[1]
             $value = $matches[2].Trim()
-
+            
             if ($currentSection -and $inList -and $currentItem.Count -gt 0) {
                 if ($listKey -eq 'pool') { $result.pool += $currentItem }
                 elseif ($listKey -eq 'entries') { $result.entries += $currentItem }
@@ -71,7 +71,7 @@ function Read-Manifest {
             }
             $inList = $false
             $nestDepth = 0
-
+            
             if ($value -eq '[' -or $value -match '^\[.*\]$') {
                 # Inline list (single line)
                 if ($value -match '^\[(.+)\]$') {
@@ -114,7 +114,7 @@ function Read-Manifest {
             }
             continue
         }
-
+        
         # List item continuation: - value
         if ($line -match '^\s*-\s+(.+)$' -and $inList) {
             $itemValue = $matches[1].Trim()
@@ -135,7 +135,7 @@ function Read-Manifest {
             }
             continue
         }
-
+        
         # Nested list item:   - key: value
         if ($line -match '^\s+-\s+([a-z_]+):\s*(.*)$' -and $nestDepth -gt 0) {
             $k = $matches[1]
@@ -145,12 +145,12 @@ function Read-Manifest {
             }
             continue
         }
-
+        
         # Indented key: value inside list item
         if ($line -match '^\s+([a-z_]+):\s*(.*)$' -and $inList) {
             $k = $matches[1]
             $v = $matches[2].Trim()
-
+            
             if ($v -eq '[') {
                 $nestDepth = 1
                 $nestKey = $k
@@ -167,7 +167,7 @@ function Read-Manifest {
             }
             continue
         }
-
+        
         # Nested list continuation inside synonym_map:   - key: [a, b]
         if ($line -match '^\s+-\s+([a-z_]+):\s*\[(.+)\]$' -and $inList) {
             $k = $matches[1]
@@ -183,13 +183,13 @@ function Read-Manifest {
             continue
         }
     }
-
+    
     # Flush last item
     if ($currentSection -and $inList -and $currentItem.Count -gt 0) {
         if ($listKey -eq 'pool') { $result.pool += $currentItem }
         elseif ($listKey -eq 'entries') { $result.entries += $currentItem }
     }
-
+    
     return $result
 }
 
@@ -198,12 +198,12 @@ function Expand-Synonyms {
         [string[]]$Keywords,
         [hashtable]$SynonymMap
     )
-
+    
     $expanded = @{}
     foreach ($kw in $Keywords) {
         $lower = $kw.ToLower()
         $expanded[$lower] = @{ Source = 'primary'; Score = $script:SCORE_PRIMARY }
-
+        
         if ($SynonymMap.ContainsKey($lower)) {
             foreach ($syn in $SynonymMap[$lower]) {
                 $expanded[$syn.ToLower()] = @{ Source = 'curated'; Score = $script:SCORE_SYNONYM_CURATED }
@@ -218,7 +218,7 @@ function Add-AiSynonyms {
         [hashtable]$Expanded,
         [string[]]$Keywords
     )
-
+    
     # AI-generated synonyms: lowercase variants, plurals, common substitutions.
     # These are NOT stored in the manifest; generated at query time.
     $aiSynonymMap = @{
@@ -233,7 +233,7 @@ function Add-AiSynonyms {
         'test' = @('spec', 'testing', 'assertion', 'coverage')
         'cli' = @('command-line', 'terminal', 'shell', 'console')
     }
-
+    
     foreach ($kw in $Keywords) {
         $lower = $kw.ToLower()
         if ($aiSynonymMap.ContainsKey($lower)) {
@@ -252,14 +252,14 @@ function Score-Entry {
         [hashtable]$Entry,
         [hashtable]$ExpandedKeywords
     )
-
+    
     $score = 0.0
     $reasons = @()
-
+    
     $allTags = @()
     if ($Entry.primary_tags) { $allTags += $Entry.primary_tags }
     if ($Entry.secondary_tags) { $allTags += $Entry.secondary_tags }
-
+    
     foreach ($tag in $allTags) {
         $lower = $tag.ToLower()
         if ($ExpandedKeywords.ContainsKey($lower)) {
@@ -268,7 +268,7 @@ function Score-Entry {
             $reasons += "$($info.Source):$tag"
         }
     }
-
+    
     return @{ Score = $score; Reasons = $reasons }
 }
 
@@ -294,21 +294,21 @@ function Get-ReferencePoolMatches {
         [string]$PoolId,
         [int]$MaxResults = 3
     )
-
+    
     Test-PoolInitialized
-
+    
     $manifest = Read-Manifest -Path $script:MANIFEST_PATH
-
+    
     if ($manifest.schema_version -ne '1.0') {
         throw "Unsupported manifest schema_version: $($manifest.schema_version). Expected 1.0."
     }
-
+    
     # Build pool member lookup
     $poolMembers = @{}
     foreach ($member in $manifest.pool) {
         $poolMembers[$member.id] = $member
     }
-
+    
     # Filter pool members by language and domain
     $candidatePoolIds = @()
     if ($PoolId) {
@@ -326,25 +326,25 @@ function Get-ReferencePoolMatches {
             }
         }
     }
-
+    
     if ($candidatePoolIds.Count -eq 0) {
         return @()
     }
-
+    
     # Build expanded keyword set
     $expanded = Expand-Synonyms -Keywords $Keywords -SynonymMap @{}
     $expanded = Add-AiSynonyms -Expanded $expanded -Keywords $Keywords
-
+    
     # Score entries
     $scored = @()
     foreach ($entry in $manifest.entries) {
         if ($candidatePoolIds -notcontains $entry.pool_id) { continue }
         if ($entry.language -and $entry.language -ne $Language) { continue }
         if ($entry.domain -and $entry.domain -ne $Domain) { continue }
-
+        
         $result = Score-Entry -Entry $entry -ExpandedKeywords $expanded
         if ($result.Score -le 0) { continue }
-
+        
         $poolMember = $poolMembers[$entry.pool_id]
         $scored += [ordered]@{
             Entry = $entry
@@ -353,7 +353,7 @@ function Get-ReferencePoolMatches {
             Reasons = $result.Reasons
         }
     }
-
+    
     # Sort by score descending, take top N
     $scored | Sort-Object -Property Score -Descending | Select-Object -First $MaxResults
 }

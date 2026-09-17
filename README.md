@@ -1,11 +1,20 @@
 # SARIMAX OHLCV Prediction
 
+<img src="assets/banner.svg" alt="SARIMAX OHLCV Prediction banner" width="100%" height="120">
+
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-2e1065?style=for-the-badge&logo=python&logoColor=00e5ff&labelColor=1a0b2e&logoColor=00e5ff)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-2e1065?style=for-the-badge&labelColor=1a0b2e&logoColor=00e5ff)](LICENSE)
+[![Ruff](https://img.shields.io/badge/lint-ruff%20%7C%20pyrefly-2e1065?style=for-the-badge&labelColor=1a0b2e&logoColor=00e5ff)](https://docs.astral.sh/ruff/)
+
+Bitcoin price prediction toolkit built on **SARIMAX**, **Prophet**, and **LSTM**. Fetches live and historical OHLCV data from Binance, trains forecasting models, runs vectorized backtests, and exposes both a **Typer CLI** and a **Streamlit GUI**.
+
+---
+
 <!-- TOC -->
 
 ## Table of Contents
 
 - [SARIMAX OHLCV Prediction](#sarimax-ohlcv-prediction)
-  - [Table of Contents](#table-of-contents)
   - [Table of Contents](#table-of-contents)
   - [Architecture](#architecture)
     - [Data flow](#data-flow)
@@ -31,42 +40,6 @@
   - [License](#license)
 
 <!-- /TOC -->
-
-
-<img src="assets/banner.svg" alt="SARIMAX OHLCV Prediction banner" width="100%" height="120">
-
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-2e1065?style=for-the-badge&logo=python&logoColor=00e5ff&labelColor=1a0b2e&logoColor=00e5ff)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-2e1065?style=for-the-badge&labelColor=1a0b2e&logoColor=00e5ff)](LICENSE)
-[![Ruff](https://img.shields.io/badge/lint-ruff%20%7C%20pyrefly-2e1065?style=for-the-badge&labelColor=1a0b2e&logoColor=00e5ff)](https://docs.astral.sh/ruff/)
-
-Bitcoin price prediction toolkit built on **SARIMAX**, **Prophet**, and **LSTM**. Fetches live and historical OHLCV data from Binance, trains forecasting models, runs vectorized backtests, and exposes both a **Typer CLI** and a **Streamlit GUI**.
-
----
-
-## Table of Contents
-
-- [Architecture](#architecture)
-  - [Data flow](#data-flow)
-  - [Model interface](#model-interface)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Install](#install)
-  - [Quick check](#quick-check)
-- [Usage](#usage)
-  - [CLI](#cli)
-  - [Streamlit GUI](#streamlit-gui)
-- [Project Structure](#project-structure)
-- [Configuration](#configuration)
-- [Caching](#caching)
-- [Backtesting](#backtesting)
-- [Model Comparison](#model-comparison)
-- [Development](#development)
-  - [Toolchain](#toolchain)
-  - [Pre-commit](#pre-commit)
-  - [Adding a new model](#adding-a-new-model)
-- [Troubleshooting](#troubleshooting)
-- [Glossary](#glossary)
-- [License](#license)
 
 ---
 

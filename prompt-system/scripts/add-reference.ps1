@@ -39,11 +39,11 @@ function Test-PoolInitialized {
 
 function Parse-GitHubUrl {
     param([string]$Url)
-
+    
     # Supports:
     # https://github.com/owner/repo/blob/branch/path/to/file
     # https://raw.githubusercontent.com/owner/repo/branch/path/to/file
-
+    
     if ($Url -match '^https?://raw\.githubusercontent\.com/([^/]+)/([^/]+)/([^/]+)/(.+)$') {
         return @{
             Owner = $matches[1]
@@ -53,7 +53,7 @@ function Parse-GitHubUrl {
             RawUrl = $Url
         }
     }
-
+    
     if ($Url -match '^https?://github\.com/([^/]+)/([^/]+)/blob/([^/]+)/(.+)$') {
         $owner = $matches[1]
         $repo = $matches[2]
@@ -68,7 +68,7 @@ function Parse-GitHubUrl {
             RawUrl = $rawUrl
         }
     }
-
+    
     throw "Unsupported GitHub URL format: $Url. Expected github.com/blob/... or raw.githubusercontent.com/..."
 }
 
@@ -79,16 +79,16 @@ function Get-CurrentCommit {
         [string]$Branch,
         [string]$Path
     )
-
+    
     $apiUrl = "https://api.github.com/repos/$Owner/$Repo/commits?path=$Path&sha=$Branch&per_page=1"
-
+    
     $headers = @{}
     $ghToken = $env:GITHUB_TOKEN
     if ($ghToken) {
         $headers['Authorization'] = "token $ghToken"
         $headers['User-Agent'] = 'reference-pool'
     }
-
+    
     try {
         $response = Invoke-RestMethod -Uri $apiUrl -Headers $headers -Method Get -ErrorAction Stop
         if ($response -and $response.Count -gt 0) {
@@ -107,7 +107,7 @@ function Get-PoolMember {
         [string]$Repo,
         [hashtable]$Manifest
     )
-
+    
     foreach ($member in $Manifest.pool) {
         $isAuthor = ($member.type -eq 'author' -and $member.handle -eq $Owner)
         $isRepo = ($member.type -eq 'repo' -and $member.repo -eq "$Owner/$Repo")
@@ -129,7 +129,7 @@ function New-PoolMember {
         [string]$TrustLevel,
         [string]$Why
     )
-
+    
     return [ordered]@{
         id = $Id
         type = $Type
@@ -157,7 +157,7 @@ function New-Entry {
         [string[]]$SecondaryTags,
         [hashtable]$SynonymMap
     )
-
+    
     $entry = [ordered]@{
         id = $Id
         pool_id = $PoolId
@@ -170,11 +170,11 @@ function New-Entry {
         primary_tags = $PrimaryTags
         secondary_tags = $SecondaryTags
     }
-
+    
     if ($SynonymMap -and $SynonymMap.Count -gt 0) {
         $entry['synonym_map'] = $SynonymMap
     }
-
+    
     return $entry
 }
 
@@ -185,36 +185,36 @@ function Save-FileToPool {
         [string]$FilePath,
         [string]$Content
     )
-
+    
     $langDir = Join-Path $script:POOL_ROOT $Language
     if (-not (Test-Path -LiteralPath $langDir -PathType Container)) {
         New-Item -ItemType Directory -Path $langDir -Force | Out-Null
     }
-
+    
     $targetDir = Join-Path $langDir $AuthorRepo
     if (-not (Test-Path -LiteralPath $targetDir -PathType Container)) {
         New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
     }
-
+    
     # Sanitize file path: remove leading slashes, normalize separators
     $sanitized = $FilePath -replace '^[\\/]+', '' -replace '/', '\'
     $targetPath = Join-Path $targetDir $sanitized
-
+    
     $targetFileDir = Split-Path -Parent $targetPath
     if (-not (Test-Path -LiteralPath $targetFileDir -PathType Container)) {
         New-Item -ItemType Directory -Path $targetFileDir -Force | Out-Null
     }
-
+    
     $Content | Set-Content -LiteralPath $targetPath -Encoding UTF8 -NoNewline
     return $targetPath
 }
 
 function Read-Manifest {
     param([string]$Path)
-
+    
     $content = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
     if (-not $content) { return @{ schema_version = ''; pool = @(); entries = @() } }
-
+    
     # Minimal YAML parser for our specific schema
     $lines = $content -split "`n"
     $result = @{ schema_version = ''; pool = @(); entries = @() }
@@ -226,15 +226,15 @@ function Read-Manifest {
     $nestDepth = 0
     $nestKey = ''
     $listKeys = @('pool', 'entries')
-
+    
     foreach ($line in $lines) {
         if ($line -match '^\s*#') { continue }
         if ($line -match '^\s*$') { continue }
-
+        
         if ($line -match '^([a-z_]+):\s*(.*)$') {
             $key = $matches[1]
             $value = $matches[2].Trim()
-
+            
             if ($currentSection -and $inList -and $currentItem.Count -gt 0) {
                 if ($listKey -eq 'pool') { $result.pool += $currentItem }
                 elseif ($listKey -eq 'entries') { $result.entries += $currentItem }
@@ -242,7 +242,7 @@ function Read-Manifest {
             }
             $inList = $false
             $nestDepth = 0
-
+            
             if ($value -eq '[' -or $value -match '^\[.*\]$') {
                 if ($value -match '^\[(.+)\]$') {
                     $inner = $matches[1]
@@ -282,7 +282,7 @@ function Read-Manifest {
             }
             continue
         }
-
+        
         if ($line -match '^\s*-\s+(.+)$' -and $inList) {
             $itemValue = $matches[1].Trim()
             if ($itemValue -match '^([a-z_]+):\s*(.*)$') {
@@ -302,7 +302,7 @@ function Read-Manifest {
             }
             continue
         }
-
+        
         if ($line -match '^\s+-\s+([a-z_]+):\s*(.*)$' -and $nestDepth -gt 0) {
             $k = $matches[1]
             $v = $matches[2].Trim().Trim('"', "'")
@@ -311,11 +311,11 @@ function Read-Manifest {
             }
             continue
         }
-
+        
         if ($line -match '^\s+([a-z_]+):\s*(.*)$' -and $inList) {
             $k = $matches[1]
             $v = $matches[2].Trim()
-
+            
             if ($v -eq '[') {
                 $nestDepth = 1
                 $nestKey = $k
@@ -332,7 +332,7 @@ function Read-Manifest {
             }
             continue
         }
-
+        
         if ($line -match '^\s+-\s+([a-z_]+):\s*\[(.+)\]$' -and $inList) {
             $k = $matches[1]
             $items = $matches[2] -split ',\s*' | ForEach-Object { $_.Trim().Trim('"', "'") }
@@ -347,12 +347,12 @@ function Read-Manifest {
             continue
         }
     }
-
+    
     if ($currentSection -and $inList -and $currentItem.Count -gt 0) {
         if ($listKey -eq 'pool') { $result.pool += $currentItem }
         elseif ($listKey -eq 'entries') { $result.entries += $currentItem }
     }
-
+    
     return $result
 }
 
@@ -361,11 +361,11 @@ function Write-Manifest {
         [string]$Path,
         [hashtable]$Manifest
     )
-
+    
     $sb = [System.Text.StringBuilder]::new()
     [void]$sb.AppendLine("schema_version: `"$($Manifest.schema_version)`"")
     [void]$sb.AppendLine('pool:')
-
+    
     foreach ($member in $Manifest.pool) {
         [void]$sb.AppendLine("  - id: `"$($member.id)`"")
         [void]$sb.AppendLine("    type: `"$($member.type)`"")
@@ -377,9 +377,9 @@ function Write-Manifest {
         [void]$sb.AppendLine("    added_at: `"$($member.added_at)`"")
         [void]$sb.AppendLine("    why: `"$($member.why)`"")
     }
-
+    
     [void]$sb.AppendLine('entries:')
-
+    
     foreach ($entry in $Manifest.entries) {
         [void]$sb.AppendLine("  - id: `"$($entry.id)`"")
         [void]$sb.AppendLine("    pool_id: `"$($entry.pool_id)`"")
@@ -391,7 +391,7 @@ function Write-Manifest {
         [void]$sb.AppendLine("    why: `"$($entry.why)`"")
         [void]$sb.AppendLine("    primary_tags: [$(($entry.primary_tags -join ', '))]")
         [void]$sb.AppendLine("    secondary_tags: [$(($entry.secondary_tags -join ', '))]")
-
+        
         if ($entry.synonym_map -and $entry.synonym_map.Count -gt 0) {
             [void]$sb.AppendLine('    synonym_map:')
             foreach ($synKey in $entry.synonym_map.Keys) {
@@ -401,7 +401,7 @@ function Write-Manifest {
             }
         }
     }
-
+    
     $sb.ToString() | Set-Content -LiteralPath $Path -Encoding UTF8 -NoNewline
 }
 
@@ -412,7 +412,7 @@ function Find-DuplicateEntry {
         [string]$FilePath,
         [string]$Commit
     )
-
+    
     foreach ($entry in $Manifest.entries) {
         if ($entry.repo -eq $Repo -and $entry.file_path -eq $FilePath) {
             return $entry
@@ -423,7 +423,7 @@ function Find-DuplicateEntry {
 
 function New-EntryId {
     param([string]$PoolId, [string]$FilePath)
-
+    
     $sanitized = $PoolId -replace '[^a-z0-9-]', '-'
     $fileSanitized = ($FilePath -replace '[^a-z0-9-]', '-' -replace '-+', '-').Trim('-')
     $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
@@ -471,12 +471,12 @@ if ($existingMember) {
 } else {
     $poolId = "$($parsedUrl.Owner)-$($parsedUrl.Repo)"
     $poolId = $poolId.ToLower().Replace('/', '-').Replace('.', '-')
-
+    
     $memberWhy = $PoolWhy
     if (-not $memberWhy) {
         $memberWhy = "Auto-created from $Url"
     }
-
+    
     $newMember = New-PoolMember `
         -Id $poolId `
         -Type 'repo' `
@@ -486,7 +486,7 @@ if ($existingMember) {
         -Domains @($Domain) `
         -TrustLevel 'premium' `
         -Why $memberWhy
-
+    
     $manifest.pool += $newMember
     $poolMemberCreated = $true
 }
@@ -501,22 +501,22 @@ if ($duplicate) {
         # Same file, same commit: refuse
         throw "Entry already exists: $($duplicate.id) (repo=$($duplicate.repo), file=$($duplicate.file_path), commit=$commit)"
     }
-
+    
     # Same file, different commit: override with newer version
     $duplicate.commit = $commit
     $duplicate.added_at = (Get-Date -Format 'yyyy-MM-dd')
     $duplicate.why = $Why
     $duplicate.primary_tags = ($Keywords -split ',').Trim()
     $duplicate.secondary_tags = @()
-
+    
     # Update cached file
     Save-FileToPool -Language $Language -AuthorRepo $authorRepo -FilePath $parsedUrl.Path -Content $fileContent
-
+    
     if ($DryRun) {
         Write-Host "[DRY] Would update entry $($duplicate.id) with commit $commit" -ForegroundColor Yellow
         return
     }
-
+    
     Write-Manifest -Path $script:MANIFEST_PATH -Manifest $manifest
     Write-Host "reference-pool: updated entry $($duplicate.id) to commit $commit" -ForegroundColor Green
     return
