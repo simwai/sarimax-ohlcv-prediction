@@ -6,6 +6,7 @@
 
 - [SARIMAX OHLCV Prediction](#sarimax-ohlcv-prediction)
   - [Table of Contents](#table-of-contents)
+  - [Table of Contents](#table-of-contents)
   - [Architecture](#architecture)
     - [Data flow](#data-flow)
     - [Model interface](#model-interface)
@@ -31,11 +32,41 @@
 
 <!-- /TOC -->
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Ruff](https://img.shields.io/badge/lint-ruff%20%7C%20pyrefly%20%7C%20pytest-success)](https://docs.astral.sh/ruff/)
+
+<img src="assets/banner.svg" alt="SARIMAX OHLCV Prediction banner" width="100%" height="120">
+
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-4a1d96?style=for-the-badge&logo=python&logoColor=00e5ff&labelColor=2e1065&color=00e5ff)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-4a1d96?style=for-the-badge&labelColor=2e1065&color=00e5ff)](LICENSE)
+[![Ruff](https://img.shields.io/badge/lint-ruff%20%7C%20pyrefly%20%7C%20pytest-4a1d96?style=for-the-badge&labelColor=2e1065&color=00e5ff)](https://docs.astral.sh/ruff/)
 
 Bitcoin price prediction toolkit built on **SARIMAX**, **Prophet**, and **LSTM**. Fetches live and historical OHLCV data from Binance, trains forecasting models, runs vectorized backtests, and exposes both a **Typer CLI** and a **Streamlit GUI**.
+
+---
+
+## Table of Contents
+
+- [Architecture](#architecture)
+  - [Data flow](#data-flow)
+  - [Model interface](#model-interface)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Install](#install)
+  - [Quick check](#quick-check)
+- [Usage](#usage)
+  - [CLI](#cli)
+  - [Streamlit GUI](#streamlit-gui)
+- [Project Structure](#project-structure)
+- [Configuration](#configuration)
+- [Caching](#caching)
+- [Backtesting](#backtesting)
+- [Model Comparison](#model-comparison)
+- [Development](#development)
+  - [Toolchain](#toolchain)
+  - [Pre-commit](#pre-commit)
+  - [Adding a new model](#adding-a-new-model)
+- [Troubleshooting](#troubleshooting)
+- [Glossary](#glossary)
+- [License](#license)
 
 ---
 
@@ -44,6 +75,17 @@ Bitcoin price prediction toolkit built on **SARIMAX**, **Prophet**, and **LSTM**
 The package follows a layered architecture: data ingestion, model abstraction, training/prediction services, backtesting, and presentation.
 
 ```mermaid
+---
+config:
+  theme: dark
+  themeVariables:
+    primaryColor: '#00e5ff'
+    primaryTextColor: '#0f0720'
+    primaryBorderColor: '#00e5ff'
+    lineColor: '#00e5ff'
+    secondaryColor: '#1a0b2e'
+    tertiaryColor: '#0f0720'
+---
 flowchart LR
     A["Data Layer\nccxt / Binance OHLCV"] --> B["Processor\nclean / resample / align"]
     B --> C["Cache Layer\njoblib / TTL"]
@@ -56,6 +98,17 @@ flowchart LR
 ### Data flow
 
 ```mermaid
+---
+config:
+  theme: dark
+  themeVariables:
+    primaryColor: '#00e5ff'
+    primaryTextColor: '#0f0720'
+    primaryBorderColor: '#00e5ff'
+    lineColor: '#00e5ff'
+    secondaryColor: '#1a0b2e'
+    tertiaryColor: '#0f0720'
+---
 flowchart LR
     FEED["Binance feed\n5m candles"] --> FETCH["fetcher.py\nfetch_with_retry"]
     FETCH --> CACHE{"cache hit?"}
@@ -70,6 +123,17 @@ flowchart LR
 ### Model interface
 
 ```mermaid
+---
+config:
+  theme: dark
+  themeVariables:
+    primaryColor: '#00e5ff'
+    primaryTextColor: '#0f0720'
+    primaryBorderColor: '#00e5ff'
+    lineColor: '#00e5ff'
+    secondaryColor: '#1a0b2e'
+    tertiaryColor: '#0f0720'
+---
 classDiagram
     class BaseModel {
         <<Protocol>>
@@ -128,7 +192,7 @@ classDiagram
 ### Install
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/simwai/sarimax-ohlcv-prediction.git
 cd sarimax-ohlcv-prediction
 pdm install
 ```
@@ -269,6 +333,17 @@ pdm run cache clear --all
 The backtesting engine wraps **vectorbt** and supports pluggable exit strategies.
 
 ```mermaid
+---
+config:
+  theme: dark
+  themeVariables:
+    primaryColor: '#00e5ff'
+    primaryTextColor: '#0f0720'
+    primaryBorderColor: '#00e5ff'
+    lineColor: '#00e5ff'
+    secondaryColor: '#1a0b2e'
+    tertiaryColor: '#0f0720'
+---
 flowchart LR
     MODEL["fitted model"] --> PREDICT["predict()\nfull history"]
     DATA["historical OHLCV"] --> SLICE["slice lookback window"]
