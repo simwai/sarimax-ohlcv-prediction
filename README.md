@@ -41,23 +41,9 @@ Bitcoin price prediction toolkit built on **SARIMAX**, **Prophet**, and **LSTM**
 
 ## Architecture
 
-The package follows a layered architecture: data ingestion, model abstraction, training/prediction services, backtesting, and presentation. The diagram below uses a dark-purple Mermaid theme.
+The package follows a layered architecture: data ingestion, model abstraction, training/prediction services, backtesting, and presentation.
 
 ```mermaid
----
-title:
-  System architecture
----
-config:
-  theme: dark
-  themeVariables:
-    primaryColor: '#2e1065'
-    primaryTextColor: '#e9d5ff'
-    primaryBorderColor: '#7c3aed'
-    lineColor: '#a78bfa'
-    secondaryColor: '#4c1d95'
-    tertiaryColor: '#1e1b4b'
----
 flowchart LR
     A["Data Layer\nccxt / Binance OHLCV"] --> B["Processor\nclean / resample / align"]
     B --> C["Cache Layer\njoblib / TTL"]
@@ -70,20 +56,6 @@ flowchart LR
 ### Data flow
 
 ```mermaid
----
-title:
-  Data flow
----
-config:
-  theme: dark
-  themeVariables:
-    primaryColor: '#2e1065'
-    primaryTextColor: '#e9d5ff'
-    primaryBorderColor: '#7c3aed'
-    lineColor: '#a78bfa'
-    secondaryColor: '#4c1d95'
-    tertiaryColor: '#1e1b4b'
----
 flowchart LR
     FEED["Binance feed\n5m candles"] --> FETCH["fetcher.py\nfetch_with_retry"]
     FETCH --> CACHE{"cache hit?"}
@@ -98,20 +70,6 @@ flowchart LR
 ### Model interface
 
 ```mermaid
----
-title:
-  Model protocol
----
-config:
-  theme: dark
-  themeVariables:
-    primaryColor: '#2e1065'
-    primaryTextColor: '#e9d5ff'
-    primaryBorderColor: '#7c3aed'
-    lineColor: '#a78bfa'
-    secondaryColor: '#4c1d95'
-    tertiaryColor: '#1e1b4b'
----
 classDiagram
     class BaseModel {
         <<Protocol>>
@@ -311,20 +269,6 @@ pdm run cache clear --all
 The backtesting engine wraps **vectorbt** and supports pluggable exit strategies.
 
 ```mermaid
----
-title:
-  Backtest flow
----
-config:
-  theme: dark
-  themeVariables:
-    primaryColor: '#2e1065'
-    primaryTextColor: '#e9d5ff'
-    primaryBorderBorder: '#7c3aed'
-    lineColor: '#a78bfa'
-    secondaryColor: '#4c1d95'
-    tertiaryColor: '#1e1b4b'
----
 flowchart LR
     MODEL["fitted model"] --> PREDICT["predict()\nfull history"]
     DATA["historical OHLCV"] --> SLICE["slice lookback window"]
