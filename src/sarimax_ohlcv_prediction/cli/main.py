@@ -12,6 +12,7 @@ from .commands.explore import register as register_explore
 from .commands.fetch import register as register_fetch
 from .commands.predict import register as register_predict
 from .commands.repl import register as register_repl
+from .commands.report import register as register_report
 from .commands.train import register as register_train
 from .parsers import _as_mode, _model_class  # noqa: F401 -- re-exported for tests/back-compat
 
@@ -45,6 +46,7 @@ register_backtest(app)
 register_explore(app)
 register_compare(app)
 register_repl(app)
+register_report(app)
 register_cache_commands(cache_app)
 
 

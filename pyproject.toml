@@ -19,6 +19,7 @@ dependencies = [
     "tensorflow>=2.16",
     "numpy>=1.26",
     "joblib>=1.4",
+    "reportlab>=5.0.1",
 ]
 [project.optional-dependencies]
 dev = [
@@ -102,6 +103,8 @@ ignore = ["S101", "T201", "ARG001", "ARG002"]
 "src/sarimax_ohlcv_prediction/cli/commands/predict.py" = ["PLR0913", "PLR0917", "PLC0415", "E501"]
 "src/sarimax_ohlcv_prediction/cli/commands/repl.py" = ["PLR0913", "PLR0917", "PLC0415", "E501"]
 "src/sarimax_ohlcv_prediction/cli/commands/train.py" = ["PLR0913", "PLR0917", "PLC0415", "E501"]
+"src/sarimax_ohlcv_prediction/cli/commands/report.py" = ["PLR0913", "PLR0917", "PLC0415", "E501"]
+"src/sarimax_ohlcv_prediction/reports/pdf.py" = ["E501"]
 "src/sarimax_ohlcv_prediction/cli/compare_core.py" = ["PLR0913", "PLR0917", "PLC0415"]
 "src/sarimax_ohlcv_prediction/cli/repl_core.py" = ["E501", "PLR0913", "PLR0917", "TRY300"]
 "src/sarimax_ohlcv_prediction/cli/repl_inquirer.py" = ["E501", "PLR0913", "PLR0917"]
