@@ -1,4 +1,7 @@
 ﻿.venv_win
+.venv/
+venv/
+env/
 .session-locks/
 .playwright-mcp/
 
@@ -20,6 +23,24 @@ SESSION_STATE-*.md
 
 # Models
 models/
+
+# Build and package artifacts
+dist/
+build/
+*.egg-info/
+.pdm-build/
+
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+.pyrefly_cache/
+.cache/
+
+# Secrets
+.env
+.env.*
+!.env.example
+secrets/
 
 # OS
 .DS_Store
