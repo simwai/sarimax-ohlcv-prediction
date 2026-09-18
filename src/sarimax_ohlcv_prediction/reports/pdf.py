@@ -197,7 +197,7 @@ def _build_results_table(result: BacktestResult, usable: float, fonts: dict[str,
         textColor=colors.white,
     )
 
-    col_widths = [30, 70, 70, 70, 70, 70, 70, 70, 80]
+    col_widths = [30, 65, 55, 55, 65, 65, 65, 65, 65, 70]
     scale = usable / sum(col_widths)
     col_widths = [w * scale for w in col_widths]
 
@@ -205,7 +205,8 @@ def _build_results_table(result: BacktestResult, usable: float, fonts: dict[str,
     header = [
         th("Metric"),
         th("Total Return"),
-        th("Sharpe"),
+        th("Calmar"),
+        th("Sortino"),
         th("Max DD"),
         th("Win Rate"),
         th("Trades"),
@@ -235,7 +236,7 @@ def _build_results_table(result: BacktestResult, usable: float, fonts: dict[str,
     ]
     for metric, value in values:
         rows.append(
-            [Paragraph(metric, st_cell), Paragraph(value, st_cell_r)] + [Paragraph("", st_cell)] * 7
+            [Paragraph(metric, st_cell), Paragraph(value, st_cell_r)] + [Paragraph("", st_cell)] * 8
         )
 
     tbl = Table(rows, colWidths=col_widths, repeatRows=1)
@@ -299,8 +300,7 @@ def _build_legend(usable: float, fonts: dict[str, str]) -> Table:
             st_leg,
         ),
         Paragraph(
-            "<b>Max Drawdown</b> - peak-to-trough equity decline"
-            " across the trade sequence.",
+            "<b>Max Drawdown</b> - peak-to-trough equity decline across the trade sequence.",
             st_leg,
         ),
     ]
@@ -365,7 +365,17 @@ def generate_pdf_report(
     )
 
     ts_now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M")
-    meta_lines = "<br/>".join(f"{k.replace('_', ' ').title()}: {v}" for k, v in meta.items())
+    ordered_meta = [
+        ("pair", meta.get("pair", "BTC/USDT")),
+        ("timeframe", meta.get("timeframe", "5m")),
+        ("exchange", meta.get("exchange", "binance")),
+        ("model", meta.get("model", "SARIMAX")),
+        ("strategy", meta.get("strategy", "exit_after_n")),
+        ("lookback", meta.get("lookback", 500)),
+        ("exit_bars", meta.get("exit_bars", 5)),
+        ("mode", meta.get("mode", "historical")),
+    ]
+    meta_lines = "<br/>".join(f"{k.replace('_', ' ').title()}: {v}" for k, v in ordered_meta)
     header_inner = Table(
         [
             [
@@ -374,8 +384,7 @@ def generate_pdf_report(
             ],
             [
                 Paragraph(
-                    f"Backtest results · {result.total_trades} trades"
-                    f" · generated {ts_now}",
+                    f"Backtest results · {result.total_trades} trades · generated {ts_now}",
                     st_sub,
                 ),
                 "",

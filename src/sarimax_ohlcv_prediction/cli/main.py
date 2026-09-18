@@ -14,6 +14,7 @@ from .commands.predict import register as register_predict
 from .commands.repl import register as register_repl
 from .commands.report import register as register_report
 from .commands.train import register as register_train
+from .commands.walk_forward import register as register_walk_forward
 from .parsers import _as_mode, _model_class  # noqa: F401 -- re-exported for tests/back-compat
 
 app = typer.Typer(
@@ -43,6 +44,7 @@ register_fetch(app)
 register_train(app)
 register_predict(app)
 register_backtest(app)
+register_walk_forward(app)
 register_explore(app)
 register_compare(app)
 register_repl(app)

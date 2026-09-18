@@ -1,6 +1,5 @@
 """Prediction helper service."""
 
-
 import pandas as pd
 
 from ..config import SETTINGS

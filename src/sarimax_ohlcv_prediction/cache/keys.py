@@ -18,6 +18,7 @@ class ModelKeyParams:
     lookback: int
     iterations: int
     data_hash: str
+    exchange_id: str | None = None
 
 
 def _sanitize(s: str) -> str:
@@ -46,7 +47,13 @@ def _data_hash(df: pd.DataFrame, n: int = 100) -> str:
     return m.hexdigest()[:16]
 
 
-def ohlcv_key(symbol: str, timeframe: str, mode: str, lookback: int) -> str:
+def ohlcv_key(
+    symbol: str,
+    timeframe: str,
+    mode: str,
+    lookback: int,
+    exchange_id: str | None = None,
+) -> str:
     """Build cache key for OHLCV data fetch.
 
     Args:
@@ -54,34 +61,39 @@ def ohlcv_key(symbol: str, timeframe: str, mode: str, lookback: int) -> str:
         timeframe: Timeframe (e.g., "5m")
         mode: "current" or "historical"
         lookback: Lookback days
+        exchange_id: Optional exchange id for multi-exchange cache namespacing
 
     Returns:
         Cache key string
     """
-    return f"ohlcv:{_sanitize(symbol)}:{_sanitize(timeframe)}:{mode}:{lookback}"
+    exchange = _sanitize(exchange_id) if exchange_id else "binance"
+    return f"ohlcv:{exchange}:{_sanitize(symbol)}:{_sanitize(timeframe)}:{mode}:{lookback}"
 
 
-def model_key(params: ModelKeyParams) -> str:
+def model_key(params: ModelKeyParams, exchange_id: str | None = None) -> str:
     """Build cache key for trained model.
 
     Args:
         params: Bundled model identity and training parameters.
+        exchange_id: Optional exchange id for multi-exchange cache namespacing.
 
     Returns:
         Cache key string
     """
+    exchange = _sanitize(exchange_id) if exchange_id else "binance"
     return (
-        f"model:{params.model_name}:{_sanitize(params.symbol)}:{_sanitize(params.timeframe)}:"
+        f"model:{params.model_name}:{exchange}:{_sanitize(params.symbol)}:{_sanitize(params.timeframe)}:"
         f"{params.lookback}:{params.iterations}:{params.data_hash}"
     )
 
 
-def prediction_key(
+def prediction_key(  # noqa: PLR0913
     model_name: str,
     symbol: str,
     timeframe: str,
     periods: int,
     data_hash: str,
+    exchange_id: str | None = None,
 ) -> str:
     """Build cache key for model predictions.
 
@@ -91,19 +103,33 @@ def prediction_key(
         timeframe: Timeframe
         periods: Number of prediction periods
         data_hash: Hash of context data (last N rows)
+        exchange_id: Optional exchange id for multi-exchange cache namespacing
 
     Returns:
         Cache key string
     """
+    exchange = _sanitize(exchange_id) if exchange_id else "binance"
     return (
-        f"pred:{model_name}:{_sanitize(symbol)}:{_sanitize(timeframe)}:"
+        f"pred:{model_name}:{exchange}:{_sanitize(symbol)}:{_sanitize(timeframe)}:"
         f"{periods}:{data_hash}"
     )
 
 
-def get_ohlcv_key_from_params(mode: str, lookback: int) -> str:
+def get_ohlcv_key_from_params(
+    mode: str,
+    lookback: int,
+    exchange_id: str | None = None,
+    symbol: str | None = None,
+    timeframe: str | None = None,
+) -> str:
     """Build OHLCV key using SETTINGS for symbol/timeframe."""
-    return ohlcv_key(SETTINGS.symbol, SETTINGS.timeframe, mode, lookback)
+    return ohlcv_key(
+        symbol or SETTINGS.symbol,
+        timeframe or SETTINGS.timeframe,
+        mode,
+        lookback,
+        exchange_id=exchange_id or SETTINGS.default_exchange_id,
+    )
 
 
 def get_model_key_from_params(
@@ -111,6 +137,7 @@ def get_model_key_from_params(
     lookback: int,
     iterations: int,
     data_hash: str,
+    exchange_id: str | None = None,
 ) -> str:
     """Build model key using SETTINGS for symbol/timeframe."""
     return model_key(
@@ -121,7 +148,8 @@ def get_model_key_from_params(
             lookback=lookback,
             iterations=iterations,
             data_hash=data_hash,
-        )
+        ),
+        exchange_id=exchange_id or SETTINGS.default_exchange_id,
     )
 
 
@@ -129,6 +157,14 @@ def get_prediction_key_from_params(
     model_name: str,
     periods: int,
     data_hash: str,
+    exchange_id: str | None = None,
 ) -> str:
     """Build prediction key using SETTINGS for symbol/timeframe."""
-    return prediction_key(model_name, SETTINGS.symbol, SETTINGS.timeframe, periods, data_hash)
+    return prediction_key(
+        model_name,
+        SETTINGS.symbol,
+        SETTINGS.timeframe,
+        periods,
+        data_hash,
+        exchange_id=exchange_id or SETTINGS.default_exchange_id,
+    )

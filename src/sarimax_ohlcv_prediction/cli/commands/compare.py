@@ -19,13 +19,23 @@ def register(app) -> None:
         fast: bool = True,
         holdout: int | None = None,
         timeout: int | None = None,
+        exchange: str = SETTINGS.default_exchange_id,
+        symbol: str = SETTINGS.symbol,
+        timeframe: str = SETTINGS.timeframe,
         no_cache: bool = False,
     ) -> None:
         """Compare all models with progress, scoring, timeout - non-REPL version."""
         cli_console = get_console()
 
         with cli_console.status(f"[status.running]Fetching {mode} data ({lookback}d)..."):
-            data = fetch_with_retry(_as_mode(mode), lookback, use_cache=not no_cache)
+            data = fetch_with_retry(
+                _as_mode(mode),
+                lookback,
+                use_cache=not no_cache,
+                exchange_id=exchange,
+                symbol=symbol,
+                timeframe=timeframe,
+            )
 
         if data.empty:
             cli_console.print("[error]Failed to fetch data[/error]")
@@ -33,18 +43,16 @@ def register(app) -> None:
 
         from ..viz.rich import print_data_summary
 
-        print_data_summary(data, f"Fetched Data ({mode}, {lookback}d)")
+        print_data_summary(
+            data, f"Fetched Data ({exchange}, {symbol}, {timeframe}, {mode}, {lookback}d)"
+        )
 
         if timeout is None:
             timeout = (
-                SETTINGS.compare_timeout_seconds
-                if fast
-                else SETTINGS.compare_full_timeout_seconds
+                SETTINGS.compare_timeout_seconds if fast else SETTINGS.compare_full_timeout_seconds
             )
 
         results = _run_compare_core(data, periods, fast, holdout, timeout)
         holdout_str = holdout if holdout is not None else periods
-        title = (
-            f"Model Comparison (periods={periods} holdout={holdout_str} {'fast' if fast else 'full'})"
-        )
+        title = f"Model Comparison (periods={periods} holdout={holdout_str} {'fast' if fast else 'full'})"
         print_model_comparison(results, title=title)

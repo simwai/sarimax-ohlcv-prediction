@@ -8,6 +8,7 @@ from pathlib import Path
 class Settings:
     """Application settings."""
 
+    default_exchange_id: str = "binance"
     symbol: str = "BTC/USDT"
     timeframe: str = "5m"
     default_lookback_days: int = 100

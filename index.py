@@ -4,7 +4,6 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-import ccxt
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -12,8 +11,7 @@ from colorlog import ColoredFormatter
 from pmdarima import auto_arima
 from prophet import Prophet
 
-# Initialize the Binance client
-binance = ccxt.binance()
+from sarimax_ohlcv_prediction.data.fetcher import get_default_exchange
 
 # Set up colored logging
 log = logging.getLogger(__name__)
@@ -41,19 +39,18 @@ if "calculation_lock" not in st.session_state:
 
 
 def fetch_data(mode: str, lookback: int) -> pd.DataFrame:
+    exchange = get_default_exchange()
     try:
         if mode == "current":
-            since = binance.milliseconds() - (24 * 60 * 60 * 1000)  # Last 24 hours
-            ohlcv = binance.fetch_ohlcv("BTC/USDT", "5m", since=since)
+            since = exchange.milliseconds() - (24 * 60 * 60 * 1000)  # Last 24 hours
+            ohlcv = exchange.fetch_ohlcv("BTC/USDT", "5m", since=since)
         elif mode == "historical":
-            since = binance.milliseconds() - (lookback * 24 * 60 * 60 * 1000)
-            ohlcv = binance.fetch_ohlcv("BTC/USDT", "5m", since=since)
+            since = exchange.milliseconds() - (lookback * 24 * 60 * 60 * 1000)
+            ohlcv = exchange.fetch_ohlcv("BTC/USDT", "5m", since=since)
         else:
             raise ValueError("Invalid mode specified")
 
-        data = pd.DataFrame(
-            ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"]
-        )
+        data = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
         data["timestamp"] = pd.to_datetime(data["timestamp"], unit="ms")
         return data
     except Exception:
@@ -130,9 +127,7 @@ def optimize_model(
         st.session_state.calculation_lock = False
 
 
-def predict_price(
-    model_fits: dict, period: int, data: pd.DataFrame, model_choice: str
-) -> dict:
+def predict_price(model_fits: dict, period: int, data: pd.DataFrame, model_choice: str) -> dict:
     predicted_prices = {}
     for column, model_fit in model_fits.items():
         if model_choice == "SARIMAX":

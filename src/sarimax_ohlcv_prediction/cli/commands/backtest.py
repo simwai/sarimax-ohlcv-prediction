@@ -21,6 +21,9 @@ def register(app) -> None:
         exit_bars: int = SETTINGS.backtest_default_exit_bars,
         mode: str = "historical",
         data_lookback: int = 500,
+        exchange: str = SETTINGS.default_exchange_id,
+        symbol: str = SETTINGS.symbol,
+        timeframe: str = SETTINGS.timeframe,
         no_cache: bool = False,
     ) -> None:
         """Run backtest on historical data."""
@@ -33,16 +36,36 @@ def register(app) -> None:
                 model_instance = model_class.load(model_path)
         else:
             with cli_console.status("[status.running]Fetching data and training..."):
-                data = fetch_with_retry(_as_mode(mode), data_lookback, use_cache=not no_cache)
+                data = fetch_with_retry(
+                    _as_mode(mode),
+                    data_lookback,
+                    use_cache=not no_cache,
+                    exchange_id=exchange,
+                    symbol=symbol,
+                    timeframe=timeframe,
+                )
                 if data.empty:
                     cli_console.print("[error]Failed to fetch data[/error]")
                     raise SystemExit(1)
                 model_instance = get_cached_model(
-                    model, data, lookback=data_lookback, use_cache=not no_cache
+                    model,
+                    data,
+                    lookback=data_lookback,
+                    use_cache=not no_cache,
+                    exchange_id=exchange,
+                    symbol=symbol,
+                    timeframe=timeframe,
                 )
 
         with cli_console.status("[status.running]Fetching test data..."):
-            test_data = fetch_with_retry(_as_mode(mode), lookback, use_cache=not no_cache)
+            test_data = fetch_with_retry(
+                _as_mode(mode),
+                lookback,
+                use_cache=not no_cache,
+                exchange_id=exchange,
+                symbol=symbol,
+                timeframe=timeframe,
+            )
             if test_data.empty:
                 cli_console.print("[error]Failed to fetch test data[/error]")
                 raise SystemExit(1)

@@ -30,7 +30,9 @@ def cache_get(key: str) -> Any | None:  # pyrefly: ignore -- cache stores arbitr
     return get_cache().get(key)
 
 
-def cache_set(key: str, value: Any, ttl: int) -> None:  # pyrefly: ignore -- cache stores arbitrary payloads
+def cache_set(
+    key: str, value: Any, ttl: int
+) -> None:  # pyrefly: ignore -- cache stores arbitrary payloads
     """Set value in cache with TTL."""
     get_cache().set(key, value, ttl)
 
@@ -50,7 +52,9 @@ def cache_stats() -> dict[str, Any]:  # pyrefly: ignore -- cache stores arbitrar
     return get_cache().stats()
 
 
-def cache_inspect(limit: int = 50) -> list[dict[str, Any]]:  # pyrefly: ignore -- cache stores arbitrary payloads
+def cache_inspect(
+    limit: int = 50,
+) -> list[dict[str, Any]]:  # pyrefly: ignore -- cache stores arbitrary payloads
     """Inspect cache entries."""
     return get_cache().inspect(limit)
 

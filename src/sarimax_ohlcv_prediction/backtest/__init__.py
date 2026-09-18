@@ -8,6 +8,7 @@ from .strategies import (
     ExitOnSignalStrategy,
     get_strategy,
 )
+from .walk_forward import WalkForwardResult, run_walk_forward
 
 __all__ = [
     "BacktestResult",
@@ -18,4 +19,6 @@ __all__ = [
     "ExitOnSignalStrategy",
     "STRATEGY_REGISTRY",
     "get_strategy",
+    "WalkForwardResult",
+    "run_walk_forward",
 ]

@@ -66,6 +66,9 @@ def _get_or_train_model(
     lookback: int,
     iterations: int,
     use_cache: bool = True,
+    exchange_id: str | None = None,
+    symbol: str | None = None,
+    timeframe: str | None = None,
     **kwargs: Any,  # pyrefly: ignore -- open model params
 ) -> BaseModel:
     """Get cached model or train new one.
@@ -76,6 +79,9 @@ def _get_or_train_model(
         lookback: Lookback days
         iterations: Training iterations
         use_cache: Whether to use cache
+        exchange_id: Optional exchange id for cache namespacing
+        symbol: Optional symbol override
+        timeframe: Optional timeframe override
         **kwargs: Additional model arguments
 
     Returns:
@@ -88,7 +94,15 @@ def _get_or_train_model(
 
     # Compute data hash for cache key
     data_hash = compute_data_hash(data)
-    cache_key = get_model_key_from_params(name, lookback, iterations, data_hash)
+    cache_key = get_model_key_from_params(
+        name,
+        lookback,
+        iterations,
+        data_hash,
+        exchange_id=exchange_id,
+        symbol=symbol,
+        timeframe=timeframe,
+    )
 
     # Try to load from cache
     cached_model = cache_get(cache_key)
@@ -112,6 +126,9 @@ def get_cached_model(
     lookback: int | None = None,
     iterations: int | None = None,
     use_cache: bool = True,
+    exchange_id: str | None = None,
+    symbol: str | None = None,
+    timeframe: str | None = None,
     **kwargs: Any,  # pyrefly: ignore -- open model params
 ) -> BaseModel:
     """Get model from cache or train new one.
@@ -122,6 +139,9 @@ def get_cached_model(
         lookback: Lookback days (default from SETTINGS)
         iterations: Training iterations (default from SETTINGS)
         use_cache: Whether to use cache
+        exchange_id: Optional exchange id for cache namespacing
+        symbol: Optional symbol override
+        timeframe: Optional timeframe override
         **kwargs: Additional model arguments
 
     Returns:
@@ -130,4 +150,14 @@ def get_cached_model(
     lookback = lookback or SETTINGS.default_lookback_days
     iterations = iterations or SETTINGS.default_iterations
 
-    return _get_or_train_model(name, data, lookback, iterations, use_cache, **kwargs)
+    return _get_or_train_model(
+        name,
+        data,
+        lookback,
+        iterations,
+        use_cache,
+        exchange_id=exchange_id,
+        symbol=symbol,
+        timeframe=timeframe,
+        **kwargs,
+    )

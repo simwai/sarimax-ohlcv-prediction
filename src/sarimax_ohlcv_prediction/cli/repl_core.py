@@ -7,10 +7,11 @@ from rich.prompt import Prompt
 from rich.table import Table
 
 from ..backtest import STRATEGY_REGISTRY, run_backtest
+from ..backtest.walk_forward import run_walk_forward
 from ..config import SETTINGS
 from ..data.fetcher import fetch_with_retry
 from ..data.modes import _as_mode
-from ..models import MODEL_REGISTRY, create_model
+from ..models import MODEL_REGISTRY, get_cached_model
 from ..viz.components import (
     DATA_STYLES,
     print_backtest_results,
@@ -77,9 +78,15 @@ def print_help(args: list[str]) -> None:
 
     table.add_section("Backtesting")
     table.add_command("backtest", "[strategy] [params]", "Run backtest")
+    table.add_command(
+        "walk-forward",
+        "[train_window] [test_window] [step_size]",
+        "Run rolling walk-forward backtest",
+    )
     table.add_command("strategies", "", "List available strategies")
 
     table.add_section("System")
+    table.add_command("use", "<exchange|symbol|timeframe> <value>", "Set current data source")
     table.add_command("help", "", "Show this help")
     table.add_command("status", "", "Show current state")
     table.add_command("clear", "", "Clear screen")
@@ -95,12 +102,18 @@ _state = {
     "model_name": None,
     "model_path": None,
     "predictions": None,
+    "exchange": SETTINGS.default_exchange_id,
+    "symbol": SETTINGS.symbol,
+    "timeframe": SETTINGS.timeframe,
 }
 
 
 _MIN_ARGS_LOAD = 1
 _MIN_ARGS_BACKTEST_LOOKBACK = 3
 _MIN_HOLDOUT = 2
+_MIN_USE_ARGS = 2
+_WALK_FORWARD_TEST_WINDOW = 120
+_WALK_FORWARD_STEP_SIZE_DIVISOR = 2
 
 
 def _parse_int(value: str, label: str) -> int | None:
@@ -138,6 +151,29 @@ def cmd_clear(args: list[str]) -> None:
     console.clear()
 
 
+@register_handler("use")
+def cmd_use(args: list[str]) -> None:
+    """Set current exchange, symbol, or timeframe."""
+    if len(args) < _MIN_USE_ARGS:
+        console.print("[error]Usage: use <exchange|symbol|timeframe> <value>[/error]")
+        return
+
+    key = args[0].lower()
+    value = args[1]
+
+    if key == "exchange":
+        _state["exchange"] = value
+        console.print(f"[success]Exchange set to {value}[/success]")
+    elif key == "symbol":
+        _state["symbol"] = value
+        console.print(f"[success]Symbol set to {value}[/success]")
+    elif key == "timeframe":
+        _state["timeframe"] = value
+        console.print(f"[success]Timeframe set to {value}[/success]")
+    else:
+        console.print("[error]Unknown setting. Use: exchange, symbol, timeframe[/error]")
+
+
 @register_handler("fetch")
 def cmd_fetch(args: list[str]) -> None:
     """Fetch data command."""
@@ -150,14 +186,26 @@ def cmd_fetch(args: list[str]) -> None:
         lookback = parsed
 
     with console.status(f"[status.running]Fetching {mode} data ({lookback}d)..."):
-        data = fetch_with_retry(_as_mode(mode), lookback)
+        data = fetch_with_retry(
+            _as_mode(mode),
+            lookback,
+            exchange_id=_state["exchange"],
+            symbol=_state["symbol"],
+            timeframe=_state["timeframe"],
+        )
 
     if data.empty:
         console.print("[error]Failed to fetch data[/error]")
         return
 
     _state["data"] = data
-    print_data_summary(data, f"Fetched Data ({mode}, {lookback}d)")
+    print_data_summary(
+        data,
+        (
+            f"Fetched Data ({_state['exchange']}, {_state['symbol']}, "
+            f"{_state['timeframe']}, {mode}, {lookback}d)"
+        ),
+    )
 
 
 @register_handler("explore")
@@ -225,8 +273,15 @@ def cmd_train(args: list[str]) -> None:
         iterations = parsed
 
     with console.status(f"[status.running]Training {model_name}..."):
-        model_instance = create_model(model_name)
-        model_instance.fit(_state["data"], iterations=iterations)
+        model_instance = get_cached_model(
+            model_name,
+            _state["data"],
+            lookback=len(_state["data"]),
+            iterations=iterations,
+            exchange_id=_state["exchange"],
+            symbol=_state["symbol"],
+            timeframe=_state["timeframe"],
+        )
 
     _state["model"] = model_instance
     _state["model_name"] = model_name
@@ -341,7 +396,8 @@ def cmd_predict(args: list[str]) -> None:
 
         _state["predictions"] = predictions
         print_predictions_table(
-            predictions, title=f"{_state['model_name']} Predictions ({periods} periods)"
+            predictions,
+            title=f"{_state['model_name']} Predictions ({_state['exchange']}, {_state['symbol']}, {_state['timeframe']}, {periods} periods)",
         )
 
     except Exception as e:
@@ -358,9 +414,7 @@ def cmd_compare(args: list[str]) -> None:
     periods, fast, holdout, timeout = _parse_compare_args(args)
     results = _run_compare_core(_state["data"], periods, fast, holdout, timeout)
     holdout_str = holdout if holdout is not None else periods
-    title = (
-        f"Model Comparison (periods={periods} holdout={holdout_str} {'fast' if fast else 'full'})"
-    )
+    title = f"Model Comparison ({_state['exchange']}, {_state['symbol']}, {_state['timeframe']}, periods={periods} holdout={holdout_str} {'fast' if fast else 'full'})"
     print_model_comparison(results, title=title)
     console.print(
         "[ui.text_dim]Tip: compare --full --holdout 24 --timeout 300 "
@@ -383,7 +437,7 @@ def cmd_benchmark(args: list[str]) -> None:
         if "--fast" not in args and "--full" not in args:
             fast = False
         results = _run_compare_core(_state["data"], periods, fast, holdout, timeout)
-        title = f"Benchmark (holdout={holdout} fast={fast})"
+        title = f"Benchmark ({_state['exchange']}, {_state['symbol']}, {_state['timeframe']}, holdout={holdout} fast={fast})"
     else:
         holdout = SETTINGS.default_prediction_periods
         if args:
@@ -402,7 +456,7 @@ def cmd_benchmark(args: list[str]) -> None:
         results = _run_compare_core(
             _state["data"], holdout, False, holdout, SETTINGS.compare_full_timeout_seconds
         )
-        title = f"Benchmark (holdout={holdout})"
+        title = f"Benchmark ({_state['exchange']}, {_state['symbol']}, {_state['timeframe']}, holdout={holdout})"
 
     print_model_comparison(results, title=title)
 
@@ -450,7 +504,58 @@ def cmd_backtest(args: list[str]) -> None:
         max_dd=result.max_drawdown,
         win_rate=result.win_rate,
         total_trades=result.total_trades,
-        title="Backtest Result",
+        title=f"Backtest Result ({_state['exchange']}, {_state['symbol']}, {_state['timeframe']})",
+    )
+
+
+@register_handler("walk-forward")
+def cmd_walk_forward(args: list[str]) -> None:
+    """Run rolling walk-forward backtest."""
+    if _state["data"] is None:
+        console.print("[warning]No data loaded. Use 'fetch' first.[/warning]")
+        return
+
+    strategy = args[0] if args else "exit_after_n"
+    train_window = SETTINGS.backtest_default_lookback
+    if len(args) > 1:
+        parsed = _parse_int(args[1], "train window")
+        if parsed is None:
+            return
+        train_window = parsed
+    test_window = _WALK_FORWARD_TEST_WINDOW
+    if len(args) > 2:
+        parsed = _parse_int(args[2], "test window")
+        if parsed is None:
+            return
+        test_window = parsed
+    step_size = max(1, test_window // _WALK_FORWARD_STEP_SIZE_DIVISOR)
+    if len(args) > 3:
+        parsed = _parse_int(args[3], "step size")
+        if parsed is None:
+            return
+        step_size = parsed
+
+    with console.status("[status.running]Running walk-forward backtest..."):
+        result = run_walk_forward(
+            model_name=_state["model_name"] or "SARIMAX",
+            data=_state["data"],
+            strategy_name=strategy,
+            train_window=train_window,
+            test_window=test_window,
+            step_size=step_size,
+            exchange_id=_state["exchange"],
+            symbol=_state["symbol"],
+            timeframe=_state["timeframe"],
+        )
+
+    print_backtest_results(
+        total_return=result.avg_total_return,
+        calmar=result.avg_calmar_ratio,
+        sortino=result.avg_sortino_ratio,
+        max_dd=result.avg_max_drawdown,
+        win_rate=result.avg_win_rate,
+        total_trades=result.total_trades,
+        title=f"Walk-Forward Result ({_state['exchange']}, {_state['symbol']}, {_state['timeframe']})",
     )
 
 

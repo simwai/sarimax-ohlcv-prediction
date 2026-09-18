@@ -1,13 +1,21 @@
 """Pydantic models for data validation."""
 
+import logging
 from typing import Any, Literal
 
+import ccxt
 import pandas as pd
 from pydantic import BaseModel, Field, field_validator
 
 _HIGH_GTE_LOW_MSG = "high must be >= low"
 _LOW_LTE_HIGH_MSG = "low must be <= high"
 _MONOTONIC_MSG = "Timestamps not monotonic at index {i}"
+_UNKNOWN_EXCHANGE_MSG = "Unknown exchange: {exchange_id}"
+_LOAD_MARKETS_FAILED_MSG = "Failed to load markets for {exchange_id}: {error}"
+_INVALID_SYMBOL_MSG = "Symbol not available on {exchange_id}: {symbol}"
+_INVALID_TIMEFRAME_MSG = "Timeframe not supported by {exchange_id}: {timeframe}"
+
+logger = logging.getLogger(__name__)
 
 
 class OHLCVRow(BaseModel):
@@ -55,7 +63,55 @@ class OHLCVResponse(BaseModel):
 
     def to_dataframe(self) -> pd.DataFrame:
         """Convert to pandas DataFrame with datetime index."""
-        df = pd.DataFrame([row.model_dump() for row in self.data])
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
-        df = df.set_index("timestamp")
-        return df[["open", "high", "low", "close", "volume"]]
+        frame = pd.DataFrame([row.model_dump() for row in self.data])
+        frame["timestamp"] = pd.to_datetime(frame["timestamp"], unit="ms", utc=True)
+        frame = frame.set_index("timestamp")
+        return frame[["open", "high", "low", "close", "volume"]]
+
+
+def validate_exchange_and_symbol(exchange_id: str, symbol: str) -> None:
+    """Validate that an exchange exists and supports a symbol.
+
+    Args:
+        exchange_id: CCXT exchange id
+        symbol: Trading symbol
+
+    Raises:
+        ValueError: if the exchange or symbol is not available
+        RuntimeError: if market loading fails
+    """
+    exchange_cls = getattr(ccxt, exchange_id, None)
+    if exchange_cls is None:
+        raise ValueError(_UNKNOWN_EXCHANGE_MSG.format(exchange_id=exchange_id))
+
+    exchange = exchange_cls()
+    try:
+        markets = exchange.load_markets()
+    except Exception as exc:
+        raise RuntimeError(
+            _LOAD_MARKETS_FAILED_MSG.format(exchange_id=exchange_id, error=exc)
+        ) from exc
+
+    if symbol not in markets:
+        raise ValueError(_INVALID_SYMBOL_MSG.format(exchange_id=exchange_id, symbol=symbol))
+
+
+def validate_timeframe(exchange_id: str, timeframe: str) -> None:
+    """Validate that a timeframe is supported by an exchange.
+
+    Args:
+        exchange_id: CCXT exchange id
+        timeframe: Candle timeframe string
+
+    Raises:
+        ValueError: if the exchange or timeframe is not available
+    """
+    exchange_cls = getattr(ccxt, exchange_id, None)
+    if exchange_cls is None:
+        raise ValueError(_UNKNOWN_EXCHANGE_MSG.format(exchange_id=exchange_id))
+
+    exchange = exchange_cls()
+    if timeframe not in exchange.timeframes:
+        raise ValueError(
+            _INVALID_TIMEFRAME_MSG.format(exchange_id=exchange_id, timeframe=timeframe)
+        )

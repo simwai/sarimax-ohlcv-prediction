@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-2e1065?style=for-the-badge&labelColor=1a0b2e&logoColor=00e5ff)](LICENSE)
 [![Ruff](https://img.shields.io/badge/lint-ruff%20%7C%20pyrefly-2e1065?style=for-the-badge&labelColor=1a0b2e&logoColor=00e5ff)](https://docs.astral.sh/ruff/)
 
-Bitcoin price prediction toolkit built on **SARIMAX**, **Prophet**, and **LSTM**. Fetches live and historical OHLCV data from Binance, trains forecasting models, runs vectorized backtests, and exposes both a **Typer CLI** and a **Streamlit GUI**.
+Bitcoin price prediction toolkit built on **SARIMAX**, **Prophet**, and **LSTM**. Fetches live and historical OHLCV data from any CCXT-supported exchange, trains forecasting models, runs vectorized backtests, and exposes both a **Typer CLI** and a **Streamlit GUI**.
 
 ---
 
@@ -60,12 +60,13 @@ config:
     tertiaryColor: '#1a0b2e'
 ---
 flowchart LR
-    A["Data Layer\nccxt / Binance OHLCV"] --> B["Processor\nclean / resample / align"]
-    B --> C["Cache Layer\njoblib / TTL"]
+    A["Data Layer\nccxt / multi-exchange OHLCV"] --> B["Processor\nclean / resample / align"]
+    B --> C["Cache Layer\njoblib / TTL / exchange-aware keys"]
     C --> D["Model Layer\nSARIMAX / Prophet / LSTM"]
     D --> E["Service Layer\ntrain / predict / artifacts"]
     E --> F["Presentation\nTyper CLI + Streamlit GUI"]
     E --> G["Backtest\nvectorbt portfolio sim"]
+    E --> H["Walk-Forward\nrolling validation"]
 ```
 
 ### Data flow
@@ -83,7 +84,7 @@ config:
     tertiaryColor: '#1a0b2e'
 ---
 flowchart LR
-    FEED["Binance feed\n5m candles"] --> FETCH["fetcher.py\nfetch_with_retry"]
+    FEED["exchange feed\n5m candles"] --> FETCH["fetcher.py\nfetch_with_retry"]
     FETCH --> CACHE{"cache hit?"}
     CACHE -->|yes| LOAD["load cached\nOHLCV"]
     CACHE -->|no| STORE["store in cache\nTTL per mode"]
@@ -91,6 +92,8 @@ flowchart LR
     STORE --> PROCESS
     PROCESS --> FIT["models/*.py\nfit / predict"]
     FIT --> OUT["CSV / charts /\nvectorbt stats"]
+    FIT --> WFO["walk_forward.py\nrolling windows"]
+    WFO --> WF_OUT["WalkForwardResult\naggregated metrics"]
 ```
 
 ### Model interface
@@ -187,8 +190,11 @@ pdm run test
 The CLI is built with **Typer** and exposes subcommands for the full workflow.
 
 ```bash
-# Fetch current 24h of 5m BTC/USDT candles
+# Fetch current 24h of 5m BTC/USDT candles from Binance
 pdm run fetch --mode current
+
+# Fetch historical data from Bybit for ETH/USDT
+pdm run fetch --mode historical --exchange bybit --symbol ETH/USDT --timeframe 15m --lookback 120
 
 # Train SARIMAX on 100 days of historical data
 pdm run train --model sarimax --lookback 100 --iterations 100
@@ -198,6 +204,9 @@ pdm run predict --model sarimax --periods 12
 
 # Backtest with default settings
 pdm run backtest --model sarimax --lookback 500
+
+# Run rolling walk-forward validation
+pdm run walk-forward --train-window 500 --test-window 120 --step-size 60
 
 # Compare SARIMAX vs Prophet vs LSTM
 pdm run compare --models sarimax prophet lstm
@@ -228,15 +237,17 @@ sarimax-ohlcv-prediction/
 │   │   ├── prophet.py            # Prophet with custom seasonality
 │   │   └── lstm.py               # Keras LSTM multi-output
 │   ├── data/
-│   │   ├── fetcher.py            # ccxt Binance fetch + retry
+│   │   ├── fetcher.py            # ccxt multi-exchange fetch + retry
 │   │   ├── processor.py          # timestamp / alignment helpers
-│   │   └── schemas.py            # typed data contracts
+│   │   ├── schemas.py            # typed data contracts + exchange validation
+│   │   └── modes.py              # data mode helpers
 │   ├── services/
 │   │   ├── training.py           # fit orchestration
 │   │   ├── prediction.py         # predict orchestration
 │   │   └── artifacts.py          # save/load wrappers
 │   ├── backtest/
 │   │   ├── engine.py             # vectorbt portfolio sim
+│   │   ├── walk_forward.py       # rolling walk-forward validation
 │   │   └── strategies/
 │   │       ├── base.py
 │   │       ├── exit_after_n.py
@@ -248,6 +259,7 @@ sarimax-ohlcv-prediction/
 │   │       ├── train.py
 │   │       ├── predict.py
 │   │       ├── backtest.py
+│   │       ├── walk_forward.py
 │   │       ├── explore.py
 │   │       └── compare.py
 │   └── viz/
@@ -291,6 +303,12 @@ The package uses a file-based cache with TTL per artifact type:
 | Historical OHLCV | 24 hours |
 | Predictions | 30 minutes |
 | Trained models | 7 days |
+
+Cache keys include the exchange id, so switching exchanges or symbols isolates cached data automatically. If you upgrade from an earlier version, clear the cache once to avoid stale entries:
+
+```bash
+pdm run cache clear --all
+```
 
 Cache control commands:
 

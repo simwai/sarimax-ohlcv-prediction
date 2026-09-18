@@ -85,10 +85,16 @@ def run_prediction_cycle(
                 else:
                     writer.writerow(["timestamp", "open", "high", "low", "close", "volume"])
                 for stamp, (_, row) in zip(timestamps, predictions.iterrows(), strict=True):
-                    writer.writerow([
-                        stamp.strftime("%Y-%m-%d %H:%M:%S"),
-                        row["open"], row["high"], row["low"], row["close"], row["volume"],
-                    ])
+                    writer.writerow(
+                        [
+                            stamp.strftime("%Y-%m-%d %H:%M:%S"),
+                            row["open"],
+                            row["high"],
+                            row["low"],
+                            row["close"],
+                            row["volume"],
+                        ]
+                    )
             Path(tmp_name).replace(target)
             csv_path = target
         except BaseException:

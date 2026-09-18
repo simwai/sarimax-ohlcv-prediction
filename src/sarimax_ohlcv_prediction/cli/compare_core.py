@@ -208,7 +208,9 @@ def _resolve_compare_params(
         assert holdout is not None
         train_df = data.iloc[:-holdout]
         test_df = data.iloc[-holdout:]
-        actual_close: np.ndarray | None = test_df["close"].to_numpy(dtype=float)  # pyrefly: ignore[bad-assignment]
+        actual_close: np.ndarray | None = test_df["close"].to_numpy(
+            dtype=float
+        )  # pyrefly: ignore[bad-assignment]
         predict_periods = holdout
     else:
         train_df = data
@@ -262,7 +264,9 @@ def _make_progress_callback(
     return _cb
 
 
-def _build_fit_kwargs(params: FitKwargsParams) -> dict[str, Any]:  # pyrefly: ignore -- heterogeneous fit kwargs
+def _build_fit_kwargs(
+    params: FitKwargsParams,
+) -> dict[str, Any]:  # pyrefly: ignore -- heterogeneous fit kwargs
     """Assemble kwargs for model.fit()."""
     fit_kwargs: dict = {"progress_callback": params.cb}
     if params.timeout is not None and params.timeout > 0:
@@ -301,10 +305,12 @@ def _score_predictions(params: ScoreParams) -> dict[str, str]:
     predicted_close = params.predictions["close"].to_numpy(dtype=float)
     if params.actual_close is None or len(predicted_close) == 0:
         info_str = _format_model_info(params.model_instance, params.name)
-        params.pending_logs.append((
-            "success",
-            f"{params.name}: Done ({params.elapsed_str}) - {info_str}",
-        ))
+        params.pending_logs.append(
+            (
+                "success",
+                f"{params.name}: Done ({params.elapsed_str}) - {info_str}",
+            )
+        )
         return {
             "status": "Success",
             "rmse": "N/A",
@@ -323,10 +329,12 @@ def _score_predictions(params: ScoreParams) -> dict[str, str]:
 
     if np.isnan(predicted_close).any():
         info = _format_model_info(params.model_instance, params.name) + " (incomplete)"
-        params.pending_logs.append((
-            "warning",
-            f"{params.name}: Timeout/partial - {params.elapsed_str} - {info}",
-        ))
+        params.pending_logs.append(
+            (
+                "warning",
+                f"{params.name}: Timeout/partial - {params.elapsed_str} - {info}",
+            )
+        )
         return {
             "status": "Timeout (partial)",
             "rmse": "N/A",
@@ -336,7 +344,9 @@ def _score_predictions(params: ScoreParams) -> dict[str, str]:
             "elapsed": params.elapsed_str,
         }
 
-    metrics = _compute_metrics(actual_close_trim, predicted_close)  # pyrefly: ignore[bad-argument-type]
+    metrics = _compute_metrics(
+        actual_close_trim, predicted_close
+    )  # pyrefly: ignore[bad-argument-type]
     info = _format_model_info(params.model_instance, params.name)
     if any(np.isnan(v) for v in metrics.values()):
         params.pending_logs.append(
@@ -424,9 +434,7 @@ def _train_and_predict_one(params: TrainPredictParams) -> tuple[str, dict[str, s
 
     try:
         model_instance = create_model(params.name)
-        cb = _make_progress_callback(
-            params.progress, params.name, task_id, total
-        )
+        cb = _make_progress_callback(params.progress, params.name, task_id, total)
         fit_kwargs = _build_fit_kwargs(
             FitKwargsParams(
                 name=params.name,
@@ -440,10 +448,12 @@ def _train_and_predict_one(params: TrainPredictParams) -> tuple[str, dict[str, s
         try:
             model_instance.fit(params.train_df, **fit_kwargs)
         except KeyboardInterrupt:
-            params.pending_logs.append((
-                "warning",
-                f"{params.name}: interrupted by user, keeping best so far",
-            ))
+            params.pending_logs.append(
+                (
+                    "warning",
+                    f"{params.name}: interrupted by user, keeping best so far",
+                )
+            )
         params.progress.update(
             task_id, completed=total, description=f"[success]{params.name} training done[/]"
         )

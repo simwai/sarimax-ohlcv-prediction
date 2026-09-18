@@ -125,7 +125,9 @@ class CacheManager:
             logger.debug("Cache read failed for key %s: %s", key, e)
         return None
 
-    def set(self, key: str, value: Any, ttl: int) -> None:  # pyrefly: ignore -- cache stores arbitrary payloads
+    def set(
+        self, key: str, value: Any, ttl: int
+    ) -> None:  # pyrefly: ignore -- cache stores arbitrary payloads
         """Store value in cache with TTL.
 
         Args:
@@ -231,7 +233,9 @@ class CacheManager:
             "cache_dir": str(self._cache_dir),
         }
 
-    def inspect(self, limit: int = 50) -> list[dict[str, Any]]:  # pyrefly: ignore -- heterogeneous entry values
+    def inspect(
+        self, limit: int = 50
+    ) -> list[dict[str, Any]]:  # pyrefly: ignore -- heterogeneous entry values
         """Inspect cache entries.
 
         Args:

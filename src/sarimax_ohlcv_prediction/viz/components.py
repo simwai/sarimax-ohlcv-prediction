@@ -42,7 +42,9 @@ _WIN_RATE_THRESHOLD = 0.5
 class DataTable(Table):
     """Compact data table with semantic column colors and zebra striping."""
 
-    def __init__(self, title: str = "", **kwargs: Any) -> None:  # pyrefly: ignore -- Rich passthrough kwargs
+    def __init__(
+        self, title: str = "", **kwargs: Any
+    ) -> None:  # pyrefly: ignore -- Rich passthrough kwargs
         super().__init__(
             title=title,
             title_style="panel.title",
@@ -55,7 +57,9 @@ class DataTable(Table):
             **kwargs,
         )
 
-    def add_data_column(self, name: str, **kwargs: Any) -> None:  # pyrefly: ignore -- Rich passthrough kwargs
+    def add_data_column(
+        self, name: str, **kwargs: Any
+    ) -> None:  # pyrefly: ignore -- Rich passthrough kwargs
         """Add an OHLCV column with semantic styling."""
         style = DATA_STYLES.get(name.lower(), "ui.text")
         self.add_column(name.capitalize(), style=style, justify="right", **kwargs)
@@ -203,7 +207,9 @@ class LiveLayout:
             if description:
                 self.progress.update(self.task_ids[name], description=description)
 
-    def update_task(self, name: str, **kwargs: Any) -> None:  # pyrefly: ignore -- Rich passthrough kwargs
+    def update_task(
+        self, name: str, **kwargs: Any
+    ) -> None:  # pyrefly: ignore -- Rich passthrough kwargs
         """Update a task."""
         if name in self.task_ids:
             self.progress.update(self.task_ids[name], **kwargs)

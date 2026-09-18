@@ -83,3 +83,36 @@ def test_generate_pdf_report_uses_fallback_fonts(tmp_path: Path) -> None:
         assert Path(output).stat().st_size > 0
     finally:
         os.chdir(original_cwd)
+
+
+def test_generate_pdf_report_includes_pair_timeframe_exchange(tmp_path: Path) -> None:
+    """PDF metadata must include pair, timeframe, and exchange without crashing."""
+    original_cwd = Path.cwd()
+    try:
+        os.chdir(tmp_path)
+        output = generate_pdf_report(
+            _result(),
+            filename="backtest_report.pdf",
+            meta={
+                "model": "SARIMAX",
+                "pair": "BTC/USDT",
+                "timeframe": "5m",
+                "exchange": "binance",
+            },
+        )
+        assert Path(output).exists()
+        assert Path(output).stat().st_size > 0
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_generate_pdf_report_uses_calmar_sortino(tmp_path: Path) -> None:
+    """PDF report must use Calmar and Sortino columns without crashing."""
+    original_cwd = Path.cwd()
+    try:
+        os.chdir(tmp_path)
+        output = generate_pdf_report(_result(), filename="backtest_report.pdf")
+        assert Path(output).exists()
+        assert Path(output).stat().st_size > 0
+    finally:
+        os.chdir(original_cwd)

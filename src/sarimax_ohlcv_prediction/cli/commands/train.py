@@ -16,6 +16,9 @@ def register(app) -> None:
         mode: str = "historical",
         lookback: int = SETTINGS.default_lookback_days,
         iterations: int = SETTINGS.default_iterations,
+        exchange: str = SETTINGS.default_exchange_id,
+        symbol: str = SETTINGS.symbol,
+        timeframe: str = SETTINGS.timeframe,
         save_path: str | None = None,
         no_cache: bool = False,
     ) -> None:
@@ -24,7 +27,14 @@ def register(app) -> None:
         _model_class(model)
 
         with cli_console.status("[status.running]Fetching training data..."):
-            data = fetch_with_retry(_as_mode(mode), lookback, use_cache=not no_cache)
+            data = fetch_with_retry(
+                _as_mode(mode),
+                lookback,
+                use_cache=not no_cache,
+                exchange_id=exchange,
+                symbol=symbol,
+                timeframe=timeframe,
+            )
 
         if data.empty:
             cli_console.print("[error]Failed to fetch data[/error]")
@@ -32,7 +42,14 @@ def register(app) -> None:
 
         with cli_console.status(f"[status.running]Training {model}..."):
             model_instance = get_cached_model(
-                model, data, lookback=lookback, iterations=iterations, use_cache=not no_cache
+                model,
+                data,
+                lookback=lookback,
+                iterations=iterations,
+                use_cache=not no_cache,
+                exchange_id=exchange,
+                symbol=symbol,
+                timeframe=timeframe,
             )
 
         cli_console.print(f"[success]{model} trained successfully[/success]")

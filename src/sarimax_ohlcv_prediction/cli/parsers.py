@@ -1,6 +1,5 @@
 """Shared CLI parsers and validators."""
 
-
 import typer
 
 from ..data.modes import Mode, as_mode

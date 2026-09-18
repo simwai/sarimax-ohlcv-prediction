@@ -66,6 +66,9 @@ def register(app) -> None:
                     "lookback": lookback,
                     "exit_bars": exit_bars,
                     "mode": mode,
+                    "pair": SETTINGS.symbol,
+                    "timeframe": SETTINGS.timeframe,
+                    "exchange": "binance",
                 },
             )
 
